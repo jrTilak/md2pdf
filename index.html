@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Markdown → PDF</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
 <style>
 /* ===== RESET ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -391,7 +393,7 @@ Inline `code` works too — great for technical notes.
 </div>
 </div><!-- /app -->
 
-<iframe id="print-frame" style="display:none;position:fixed;inset:0;z-index:9999;width:100%;height:100%;border:none;"></iframe>
+
 
 <script>
 // ============================
@@ -856,58 +858,104 @@ function applyTheme(name, btn) {
 // SAVE AS PDF
 // ============================
 function savePDF() {
-  // Make sure preview is rendered
+  const btn = document.querySelector('.pdf-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+
+  function resetBtn() {
+    btn.disabled = false;
+    btn.textContent = '↓ Save as PDF';
+  }
+
   renderPreview();
   const html = marked.parse(id('editor').value);
-  const c = S.colors;
-  const m = S.margin;
-  const pm = Math.round(m * 1.15);
+  const c  = S.colors;
+  const m  = S.margin;              // vertical margin, px
+  const pm = Math.round(m * 1.15); // horizontal margin, px
 
+  // Paper dimensions in mm
   const paperDims = {
-    A4:     ['210mm','297mm'],
-    A3:     ['297mm','420mm'],
-    Letter: ['8.5in','11in'],
-    Legal:  ['8.5in','14in'],
-  }[S.paperSize] || ['210mm','297mm'];
+    A4:     { w: 210,   h: 297   },
+    A3:     { w: 297,   h: 420   },
+    Letter: { w: 215.9, h: 279.4 },
+    Legal:  { w: 215.9, h: 355.6 },
+  }[S.paperSize] || { w: 210, h: 297 };
 
-  // Collect all loaded fonts
-  const allFonts = [...new Set(Object.values(S.fonts).filter(Boolean))];
-  const gfLinks = allFonts.map(f => {
-    const slug = f.replace(/ /g, '+');
-    return `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${slug}:ital,wght@0,400;0,600;0,700;1,400&display=swap">`;
-  }).join('\n');
+  // Convert px margins to mm (96 dpi: 1 px = 25.4/96 mm)
+  const mmV = m  * 25.4 / 96;
+  const mmH = pm * 25.4 / 96;
 
-  // Build print CSS from current state (reuse _lastCSS, strip #paper rule, replace selectors)
-  const printCSS = (window._lastCSS || '').replace(/#paper\s*\{[^}]*\}/g, '');
+  // Content width in CSS pixels for the off-screen render target
+  const contentWpx = Math.round((paperDims.w - 2 * mmH) * 96 / 25.4);
 
-  const doc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-${gfLinks}
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{background:${c.page_bg};-webkit-print-color-adjust:exact;print-color-adjust:exact}
-@page{size:${paperDims[0]} ${paperDims[1]};margin:${m}px ${pm}px}
-body{font-size:16px;padding:0;margin:0}
-#preview-content{word-wrap:break-word;overflow-wrap:break-word}
-#preview-content img{max-width:100%}
-${printCSS}
-#preview-content table{page-break-inside:avoid}
-#preview-content h1,#preview-content h2,#preview-content h3{page-break-after:avoid}
-</style>
-</head>
-<body>
-<div id="preview-content">${html}</div>
-</body>
-</html>`;
+  // Build scoped CSS: drop the #paper padding rule and rename the selector
+  const printCSS = (window._lastCSS || '')
+    .replace(/#paper\s*\{[^}]*\}/g, '')
+    .replace(/#preview-content/g, '#pdf-content');
 
-  const frame = id('print-frame');
-  frame.style.display = 'block';
-  const fd = frame.contentDocument;
-  fd.open(); fd.write(doc); fd.close();
-  // Wait for fonts to load in iframe before printing
-  setTimeout(() => { frame.contentWindow.print(); frame.style.display = 'none'; }, 1000);
+  // Off-screen container at exact paper content width
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText =
+    `position:fixed;top:-99999px;left:-99999px;` +
+    `background:${c.page_bg};font-size:16px;width:${contentWpx}px;padding:0;margin:0`;
+  wrapper.innerHTML =
+    `<div id="pdf-content" style="word-wrap:break-word;overflow-wrap:break-word">${html}</div>`;
+  document.body.appendChild(wrapper);
+
+  const styleEl = document.createElement('style');
+  styleEl.textContent =
+    `*,*::before,*::after{box-sizing:border-box}` +
+    `#pdf-content img{max-width:100%}${printCSS}`;
+  document.head.appendChild(styleEl);
+
+  const SCALE = 2; // render at 2× for sharpness
+
+  document.fonts.ready.then(() => {
+    return html2canvas(wrapper, {
+      scale: SCALE,
+      useCORS: true,
+      logging: false,
+      backgroundColor: c.page_bg,
+    });
+  }).then(canvas => {
+    document.body.removeChild(wrapper);
+    document.head.removeChild(styleEl);
+
+    // pixels per mm on the rendered canvas
+    const pxPerMm  = SCALE * 96 / 25.4;
+    const contentW = paperDims.w - 2 * mmH;   // usable width  in mm
+    const pageH    = paperDims.h - 2 * mmV;   // usable height in mm per page
+    const totalH   = canvas.height / pxPerMm; // full content height in mm
+    const numPages = Math.ceil(totalH / pageH);
+
+    const pdf = new jspdf.jsPDF('p', 'mm', [paperDims.w, paperDims.h]);
+
+    for (let i = 0; i < numPages; i++) {
+      if (i > 0) pdf.addPage();
+
+      const sliceTopPx = Math.round(i * pageH * pxPerMm);
+      const sliceHPx   = Math.min(Math.round(pageH * pxPerMm), canvas.height - sliceTopPx);
+      const sliceHMm   = sliceHPx / pxPerMm;
+
+      // Crop the full canvas to just this page's slice
+      const pc = document.createElement('canvas');
+      pc.width  = canvas.width;
+      pc.height = sliceHPx;
+      const ctx = pc.getContext('2d');
+      ctx.fillStyle = c.page_bg;
+      ctx.fillRect(0, 0, pc.width, pc.height);
+      ctx.drawImage(canvas, 0, -sliceTopPx);
+
+      pdf.addImage(pc.toDataURL('image/jpeg', 0.98), 'JPEG', mmH, mmV, contentW, sliceHMm);
+    }
+
+    pdf.save('document.pdf');
+    resetBtn();
+  }).catch(() => {
+    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    if (document.head.contains(styleEl)) document.head.removeChild(styleEl);
+    resetBtn();
+  });
 }
 
 // ============================
