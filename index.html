@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown → PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+/* ===== RESET ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; color: #1a1a1a; background: #f0f0f0; }
+
+/* ===== LAYOUT ===== */
+.app { display: flex; height: 100vh; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 290px; min-width: 290px;
+  background: #fff; border-right: 1px solid #e8e8e8;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar-head {
+  padding: 13px 16px; border-bottom: 1px solid #e8e8e8;
+  display: flex; align-items: center; gap: 8px;
+  background: #fafafa;
+}
+.s-title { font-size: 14px; font-weight: 700; color: #111; letter-spacing: -0.2px; }
+.s-badge { font-size: 9px; font-weight: 600; background: #5b4dff; color: #fff; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.3px; }
+.sidebar-body { flex: 1; overflow-y: auto; }
+
+/* ===== PANELS ===== */
+.panel { border-bottom: 1px solid #f0f0f0; }
+.ph {
+  padding: 9px 16px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.7px; color: #999;
+  cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  user-select: none; transition: background 0.1s;
+}
+.ph:hover { background: #fafafa; }
+.ph .arr { font-size: 10px; transition: transform 0.2s; }
+.panel.closed .arr { transform: rotate(-90deg); }
+.pb { padding: 4px 16px 14px; }
+.panel.closed .pb { display: none; }
+
+/* ===== TABS (small pill-style) ===== */
+.ptabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0 6px; }
+.ptab {
+  padding: 3px 9px; font-size: 11px; border-radius: 20px;
+  border: 1px solid #e0e0e0; cursor: pointer;
+  background: #fff; color: #666; transition: all 0.1s;
+}
+.ptab:hover { border-color: #aaa; color: #333; }
+.ptab.on { background: #5b4dff; color: #fff; border-color: #5b4dff; }
+
+/* ===== FONT LIST ===== */
+.font-search {
+  width: 100%; padding: 7px 10px; margin-bottom: 6px;
+  border: 1px solid #e0e0e0; border-radius: 8px;
+  font-size: 12px; outline: none; color: #222; background: #fff;
+}
+.font-search:focus { border-color: #5b4dff; box-shadow: 0 0 0 2px #5b4dff18; }
+.font-list {
+  max-height: 160px; overflow-y: auto;
+  border: 1px solid #e8e8e8; border-radius: 8px; background: #fff;
+}
+.font-item {
+  padding: 6px 10px; font-size: 13px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid #f5f5f5; color: #222; transition: background 0.08s;
+}
+.font-item:last-child { border-bottom: none; }
+.font-item:hover { background: #f5f3ff; }
+.font-item.on { background: #ede9ff; color: #5b4dff; font-weight: 500; }
+.fi-cat { font-size: 10px; color: #ccc; font-family: monospace; }
+.font-loading { font-size: 11px; color: #5b4dff; padding: 3px 0; min-height: 17px; }
+
+/* ===== CONTROLS ===== */
+.ctrl { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.ctrl:last-child { margin-bottom: 0; }
+.ctrl label { font-size: 11px; color: #777; min-width: 70px; }
+.ctrl input[type=range] { flex: 1; accent-color: #5b4dff; cursor: pointer; }
+.ctrl .vv { font-size: 11px; color: #aaa; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.ctrl input[type=color] {
+  width: 34px; height: 27px; border: 1px solid #e0e0e0; border-radius: 7px;
+  cursor: pointer; padding: 2px; background: none; flex-shrink: 0;
+}
+.ctrl select {
+  flex: 1; font-size: 12px; padding: 5px 7px; border: 1px solid #e0e0e0;
+  border-radius: 7px; background: #fff; color: #222; outline: none; cursor: pointer;
+}
+.divider { height: 1px; background: #f0f0f0; margin: 10px 0; }
+
+/* ===== THEME GRID ===== */
+.tgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 6px 0; }
+.tbtn {
+  padding: 6px 4px; font-size: 11px; border: 1px solid #e0e0e0; border-radius: 8px;
+  background: #fff; color: #555; cursor: pointer; text-align: center; transition: all 0.1s;
+}
+.tbtn:hover { border-color: #5b4dff; color: #5b4dff; }
+.tbtn.on { background: #5b4dff; color: #fff; border-color: #5b4dff; font-weight: 500; }
+
+/* ===== MAIN ===== */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; background: #fff; border-bottom: 1px solid #e8e8e8;
+  flex-shrink: 0;
+}
+.view-grp { display: flex; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+.vtab { padding: 6px 16px; font-size: 12px; font-weight: 500; cursor: pointer; background: #fff; color: #888; border: none; transition: all 0.1s; }
+.vtab.on { background: #5b4dff; color: #fff; }
+.sp { flex: 1; }
+.paper-sel {
+  font-size: 12px; padding: 6px 10px; border: 1px solid #e0e0e0;
+  border-radius: 8px; background: #fff; color: #333; outline: none; cursor: pointer;
+}
+.pdf-btn {
+  padding: 7px 18px; font-size: 12px; font-weight: 600; letter-spacing: 0.1px;
+  background: #5b4dff; color: #fff; border: none; border-radius: 8px;
+  cursor: pointer; transition: background 0.15s;
+}
+.pdf-btn:hover { background: #4a3de0; }
+.content { flex: 1; display: flex; overflow: hidden; }
+
+/* ===== EDITOR ===== */
+#editor {
+  flex: 1; border: none; outline: none; resize: none;
+  font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+  font-size: 13.5px; line-height: 1.75; padding: 22px 24px;
+  color: #333; background: #fafafa; display: block; min-width: 0;
+}
+
+/* ===== PREVIEW PANE ===== */
+#preview-pane {
+  flex: 1; overflow-y: auto; background: #e0e0e0;
+  padding: 24px; display: none; min-width: 0;
+}
+.paper {
+  background: white; margin: 0 auto;
+  box-shadow: 0 2px 24px rgba(0,0,0,0.13);
+  border-radius: 3px;
+}
+.paper.A4    { max-width: 794px;  min-height: 1122px; }
+.paper.A3    { max-width: 1122px; min-height: 1587px; }
+.paper.Letter{ max-width: 816px;  min-height: 1056px; }
+.paper.Legal { max-width: 816px;  min-height: 1344px; }
+#preview-content { word-wrap: break-word; overflow-wrap: break-word; }
+#preview-content img { max-width: 100%; }
+#preview-content * { box-sizing: border-box; }
+
+/* checkbox in task lists */
+#preview-content input[type=checkbox] { margin-right: 5px; cursor: default; }
+
+/* ===== SPLIT VIEW ===== */
+.split-mode #editor, .split-mode #preview-pane { flex: 1; display: block !important; }
+.split-mode #editor { border-right: 1px solid #e0e0e0; max-width: 50%; }
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #bbb; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ======== SIDEBAR ======== -->
+<aside class="sidebar">
+  <div class="sidebar-head">
+    <div class="s-title">Markdown → PDF</div>
+    <div class="s-badge">GOOGLE FONTS</div>
+  </div>
+  <div class="sidebar-body">
+
+    <!-- THEMES -->
+    <div class="panel" id="p-themes">
+      <div class="ph" onclick="togglePanel('p-themes')">Themes <span class="arr">▾</span></div>
+      <div class="pb">
+        <div class="tgrid">
+          <button class="tbtn on" onclick="applyTheme('github',this)">GitHub</button>
+          <button class="tbtn" onclick="applyTheme('minimal',this)">Minimal</button>
+          <button class="tbtn" onclick="applyTheme('academic',this)">Academic</button>
+          <button class="tbtn" onclick="applyTheme('elegant',this)">Elegant</button>
+          <button class="tbtn" onclick="applyTheme('dark',this)">Dark</button>
+          <button class="tbtn" onclick="applyTheme('retro',this)">Retro</button>
+          <button class="tbtn" onclick="applyTheme('ocean',this)">Ocean</button>
+          <button class="tbtn" onclick="applyTheme('forest',this)">Forest</button>
+          <button class="tbtn" onclick="applyTheme('rose',this)">Rose</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FONTS -->
+    <div class="panel" id="p-fonts">
+      <div class="ph" onclick="togglePanel('p-fonts')">Fonts <span class="arr">▾</span></div>
+      <div class="pb">
+        <div class="ptabs" id="cat-tabs">
+          <div class="ptab on" data-cat="handwriting" onclick="selCat(this)">Handwritten</div>
+          <div class="ptab" data-cat="serif" onclick="selCat(this)">Serif</div>
+          <div class="ptab" data-cat="sans-serif" onclick="selCat(this)">Sans</div>
+          <div class="ptab" data-cat="monospace" onclick="selCat(this)">Mono</div>
+          <div class="ptab" data-cat="display" onclick="selCat(this)">Display</div>
+        </div>
+        <input class="font-search" id="font-search" placeholder="Search all fonts…" oninput="renderFontList()">
+        <div class="font-list" id="font-list"></div>
+        <div class="font-loading" id="font-loading"></div>
+        <div class="divider"></div>
+        <div style="font-size:11px;color:#999;margin-bottom:6px;">Apply font to:</div>
+        <div class="ptabs" id="font-target-tabs">
+          <div class="ptab on" data-el="all" onclick="selFontTarget(this)">All</div>
+          <div class="ptab" data-el="h1" onclick="selFontTarget(this)">H1</div>
+          <div class="ptab" data-el="h2" onclick="selFontTarget(this)">H2</div>
+          <div class="ptab" data-el="h3" onclick="selFontTarget(this)">H3</div>
+          <div class="ptab" data-el="p" onclick="selFontTarget(this)">Body</div>
+          <div class="ptab" data-el="code" onclick="selFontTarget(this)">Code</div>
+        </div>
+        <div style="font-size:10px;color:#bbb;padding-top:2px;">Click a font above to apply it</div>
+      </div>
+    </div>
+
+    <!-- TYPOGRAPHY -->
+    <div class="panel" id="p-type">
+      <div class="ph" onclick="togglePanel('p-type')">Typography & Scale <span class="arr">▾</span></div>
+      <div class="pb" style="padding-top:10px;">
+        <div class="ctrl">
+          <label>Global scale</label>
+          <input type="range" id="base-scale" min="0.65" max="1.6" step="0.05" value="1.0"
+            oninput="S.scale=+this.value; id('vl-scale').textContent=(+this.value).toFixed(2)+'×'; buildCSS()">
+          <span class="vv" id="vl-scale">1.00×</span>
+        </div>
+        <div class="ctrl">
+          <label>Line height</label>
+          <input type="range" id="line-height" min="1.2" max="2.5" step="0.05" value="1.7"
+            oninput="S.lh=+this.value; id('vl-lh').textContent=(+this.value).toFixed(2); buildCSS()">
+          <span class="vv" id="vl-lh">1.70</span>
+        </div>
+        <div class="ctrl">
+          <label>Para spacing</label>
+          <input type="range" id="para-space" min="0.3" max="1.8" step="0.05" value="0.75"
+            oninput="S.paraSpace=+this.value; id('vl-ps').textContent=(+this.value).toFixed(2)+'em'; buildCSS()">
+          <span class="vv" id="vl-ps">0.75em</span>
+        </div>
+        <div class="divider"></div>
+        <div style="font-size:11px;color:#999;margin-bottom:6px;">Element font size (em):</div>
+        <div class="ptabs" id="size-elem-tabs">
+          <div class="ptab on" data-el="h1" onclick="selSizeElem(this)">H1</div>
+          <div class="ptab" data-el="h2" onclick="selSizeElem(this)">H2</div>
+          <div class="ptab" data-el="h3" onclick="selSizeElem(this)">H3</div>
+          <div class="ptab" data-el="h4" onclick="selSizeElem(this)">H4</div>
+          <div class="ptab" data-el="p" onclick="selSizeElem(this)">Body</div>
+        </div>
+        <div id="size-ctrl-area"></div>
+      </div>
+    </div>
+
+    <!-- COLORS -->
+    <div class="panel" id="p-colors">
+      <div class="ph" onclick="togglePanel('p-colors')">Colors <span class="arr">▾</span></div>
+      <div class="pb" style="padding-top:8px;">
+        <div class="ptabs" id="color-elem-tabs">
+          <div class="ptab on" data-el="page" onclick="selColorElem(this)">Page</div>
+          <div class="ptab" data-el="h1" onclick="selColorElem(this)">H1</div>
+          <div class="ptab" data-el="h2" onclick="selColorElem(this)">H2</div>
+          <div class="ptab" data-el="h3" onclick="selColorElem(this)">H3</div>
+          <div class="ptab" data-el="p" onclick="selColorElem(this)">Body</div>
+          <div class="ptab" data-el="link" onclick="selColorElem(this)">Links</div>
+          <div class="ptab" data-el="code" onclick="selColorElem(this)">Code</div>
+          <div class="ptab" data-el="bq" onclick="selColorElem(this)">Quote</div>
+          <div class="ptab" data-el="hr" onclick="selColorElem(this)">Divider</div>
+        </div>
+        <div id="color-ctrl-area"></div>
+      </div>
+    </div>
+
+    <!-- PAGE -->
+    <div class="panel" id="p-page">
+      <div class="ph" onclick="togglePanel('p-page')">Page Layout <span class="arr">▾</span></div>
+      <div class="pb" style="padding-top:10px;">
+        <div class="ctrl">
+          <label>Page margin</label>
+          <input type="range" id="page-margin" min="20" max="100" step="4" value="52"
+            oninput="S.margin=+this.value; id('vl-mg').textContent=this.value+'px'; buildCSS()">
+          <span class="vv" id="vl-mg">52px</span>
+        </div>
+        <div class="ctrl">
+          <label>Paper size</label>
+          <select id="paper-size2" onchange="setPaper(this.value)">
+            <option value="A4" selected>A4</option>
+            <option value="A3">A3</option>
+            <option value="Letter">US Letter</option>
+            <option value="Legal">US Legal</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar-body -->
+</aside>
+
+<!-- ======== MAIN ======== -->
+<div class="main">
+  <div class="toolbar">
+    <div class="view-grp">
+      <button class="vtab on" onclick="setView('edit',this)">Edit</button>
+      <button class="vtab" onclick="setView('split',this)">Split</button>
+      <button class="vtab" onclick="setView('preview',this)">Preview</button>
+    </div>
+    <div class="sp"></div>
+    <select class="paper-sel" id="paper-size" onchange="setPaper(this.value)">
+      <option value="A4" selected>A4</option>
+      <option value="A3">A3</option>
+      <option value="Letter">US Letter</option>
+      <option value="Legal">US Legal</option>
+    </select>
+    <button class="pdf-btn" onclick="savePDF()">↓ Save as PDF</button>
+  </div>
+
+  <div class="content" id="content-area">
+    <textarea id="editor" spellcheck="false" oninput="renderPreview()" placeholder="Paste or type your Markdown here…">
+# Welcome to Markdown → PDF
+
+A powerful converter with **100+ Google Fonts** and full per-element customization.
+
+## What You Can Do
+
+- ✅ Paste markdown and see a **real-time preview**
+- ✅ Pick any Google Font — including beautiful **handwritten** styles
+- ✅ Set font, size, and color **per element** (H1, H2, body, links…)
+- ✅ Choose paper size and download a clean **PDF**
+
+---
+
+## Formatting Examples
+
+### Tables
+
+| Element | Customizable | Notes |
+|---------|:---:|-------|
+| Headings H1–H4 | ✓ | Font, size, color |
+| Body text | ✓ | Font, scale, line-height |
+| Links | ✓ | Color |
+| Code blocks | ✓ | Font, background |
+| Blockquotes | ✓ | Border, bg, text color |
+
+### Task List
+
+- [x] Open the converter
+- [x] Pick a font from the sidebar
+- [ ] Write some notes
+- [ ] Download as PDF
+
+### Blockquote
+
+> "Simplicity is the ultimate sophistication."
+> — Leonardo da Vinci
+
+### Code Block
+
+```js
+function greet(name) {
+  return `Hello, ${name}! Welcome to Markdown PDF.`;
+}
+console.log(greet("world"));
+```
+
+Inline `code` works too — great for technical notes.
+
+### Text Styles
+
+**Bold text**, *italic text*, ~~strikethrough~~, and `inline code`.
+
+### Ordered List
+
+1. Choose a theme from the sidebar
+2. Search for a Google Font you love
+3. Adjust sizes using the scale slider
+4. Switch to Preview tab
+5. Click **Save as PDF**
+
+---
+
+*Try the **Handwritten** font category for a personal journal feel!*
+    </textarea>
+    <div id="preview-pane">
+      <div class="paper A4" id="paper">
+        <div id="preview-content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /app -->
+
+<iframe id="print-frame" style="display:none;position:fixed;inset:0;z-index:9999;width:100%;height:100%;border:none;"></iframe>
+
+<script>
+// ============================
+// FONT DATABASE
+// ============================
+const FONT_DB = {
+  handwriting: [
+    'Dancing Script','Pacifico','Great Vibes','Satisfy','Sacramento','Caveat',
+    'Kalam','Patrick Hand','Indie Flower','Shadows Into Light','Amatic SC',
+    'Permanent Marker','Rock Salt','Yellowtail','Parisienne','Allura','Alex Brush',
+    'Pinyon Script','Courgette','Cookie','Niconne','Italianno','Tangerine','Norican',
+    'Calligraffitti','Reenie Beanie','Kristi','Marck Script','Birthstone','Amita',
+    'Carattere','La Belle Aurore','Give You Glory','Homemade Apple',
+    'Monsieur La Doulaise','Herr Von Muellerhoff','Mr De Haviland',
+    'Mrs Saint Delafield','Bad Script','Damion','Engagement','Euphoria Script',
+    'Felipa','Inspiration','Meie Script','Miss Fajardose','Molle','Mr Bedfort',
+    'Ms Madi','Mea Culpa','Imperial Script','Oooh Baby','Ruthie','Sevillana',
+    'Srisakdi','Stalemate','Yellowtail','Zeyada',
+  ],
+  serif: [
+    'Playfair Display','Merriweather','Lora','EB Garamond','Cormorant Garamond',
+    'Libre Baskerville','Crimson Text','Source Serif 4','PT Serif','Bitter',
+    'Domine','Cardo','Spectral','Vollkorn','Zilla Slab','Arvo','Roboto Slab',
+    'Noto Serif','Frank Ruhl Libre','Tinos','Gentium Plus','Alegreya',
+    'Alegreya SC','Alike','Almendra','Amethysta','Artifika','Cambo',
+    'Cantata One','Carme','Cinzel Decorative','Della Respira','Enriqueta',
+    'Fauna One','Fjord One','Glegoo','Headland One','IM Fell English',
+    'Josefin Slab','Kameron','Keania One','Laila','Lustria','Mate',
+    'Noticia Text','Palatino Linotype','Sanchez','Schabo','Trocchi','Unna','Vidaloka',
+  ],
+  'sans-serif': [
+    'Roboto','Open Sans','Lato','Montserrat','Nunito','Poppins','Inter',
+    'Raleway','Work Sans','Source Sans 3','Josefin Sans','Quicksand','Oxygen',
+    'Mulish','Rubik','DM Sans','Outfit','Manrope','Plus Jakarta Sans','Figtree',
+    'Nunito Sans','Ubuntu','Cabin','Barlow','Karla','Hind','Fira Sans',
+    'Noto Sans','Overpass','Public Sans','Readex Pro','Sora','Titillium Web',
+    'Varela Round','Asap','Assistant','Dosis','Exo','Gudea','Hind Siliguri',
+    'IBM Plex Sans','Jost','Kanit','Libre Franklin','Mada','Maven Pro',
+    'Nanum Gothic','Prompt','Questrial','Sarabun','Schibsted Grotesk',
+    'Signika','Tajawal','Urbanist','Ysabeau',
+  ],
+  monospace: [
+    'Fira Code','JetBrains Mono','Source Code Pro','Inconsolata','Space Mono',
+    'IBM Plex Mono','Courier Prime','Roboto Mono','Ubuntu Mono','Anonymous Pro',
+    'Cutive Mono','Share Tech Mono','Nova Mono','Cousine','Overpass Mono',
+    'Nanum Gothic Coding','PT Mono','B612 Mono','DM Mono','Red Hat Mono',
+    'Azeret Mono','Big Shoulders Inline','Chivo Mono','Fragment Mono',
+    'Martian Mono','Noto Sans Mono','Sometype Mono','Spline Sans Mono',
+  ],
+  display: [
+    'Lobster','Lobster Two','Cinzel','Abril Fatface','Righteous','Fredoka',
+    'Comfortaa','Boogaloo','Rancho','Kaushan Script','Philosopher','Oswald',
+    'Exo 2','Bebas Neue','Alfa Slab One','Arbutus Slab','Baloo 2','Baumans',
+    'Big Shoulders Display','Bungee','Cabin Sketch','Cagliostro','Chewy',
+    'Chivo','Chonburi','Coda','Damion','Economica','Fascinate','Fugaz One',
+    'Galindo','Graduate','Hammersmith One','Habibi','Iceland','Julius Sans One',
+    'Krona One','League Spartan','Leckerli One','Lily Script One','Limelight',
+    'Lilita One','Londrina Solid','Macondo','McLaren','Megrim','Michroma',
+    'Monoton','Nixie One','Oleo Script','Orbitron','Overlock','Paytone One',
+    'Piedra','Pirata One','Play','Plaster','Poller One','Poor Story',
+    'Press Start 2P','Russo One','Sail','Sancreek','Seaweed Script',
+    'Sigmar One','Six Caps','Skranji','Slackey','Smythe','Sniglet',
+    'Squada One','Srisakdi','Stardos Stencil','Stint Ultra Condensed',
+    'Stoke','Teko','Titan One','Ultra','Underdog','Unifraktur Maguntia',
+    'Viga','Wallpoet','Walter Turncoat','Warnes','Wire One','Yrsa',
+  ],
+};
+
+// ============================
+// STATE
+// ============================
+const S = {
+  cat: 'handwriting',
+  fontTarget: 'all',
+  sizeElem: 'h1',
+  colorElem: 'page',
+  scale: 1.0,
+  lh: 1.7,
+  paraSpace: 0.75,
+  margin: 52,
+  paperSize: 'A4',
+  loaded: new Set(),
+  fonts: { all:null, h1:null, h2:null, h3:null, h4:null, p:null, code:null },
+  sizes: { h1:2.1, h2:1.6, h3:1.25, h4:1.05, p:1.0 },
+  colors: {
+    page_bg:'#ffffff', page_text:'#1a1a1a',
+    h1:'#111111', h2:'#1f1f1f', h3:'#2d2d2d',
+    p:'#1a1a1a', link:'#0969da',
+    code_bg:'#f6f8fa', code_text:'#333333',
+    bq_border:'#0969da', bq_bg:'#f0f6ff', bq_text:'#444444',
+    hr:'#dddddd',
+    table_head_bg:'#f6f8fa', table_border:'#e0e0e0',
+  },
+  view: 'edit',
+};
+
+// ============================
+// THEMES
+// ============================
+const THEMES = {
+  github: {
+    colors: { page_bg:'#ffffff',page_text:'#1f2328',h1:'#1f2328',h2:'#1f2328',h3:'#2d333b',p:'#1f2328',link:'#0969da',code_bg:'#f6f8fa',code_text:'#444',bq_border:'#0969da',bq_bg:'#ddf4ff22',bq_text:'#444',hr:'#d0d7de',table_head_bg:'#f6f8fa',table_border:'#d0d7de' },
+    sizes:{h1:2.0,h2:1.5,h3:1.25,h4:1.0,p:1.0}, lh:1.7, paraSpace:0.75, margin:52,
+    fonts:{all:null},
+  },
+  minimal: {
+    colors: { page_bg:'#fafafa',page_text:'#222',h1:'#111',h2:'#1a1a1a',h3:'#2a2a2a',p:'#222',link:'#333',code_bg:'#ebebeb',code_text:'#333',bq_border:'#bbb',bq_bg:'#f4f4f4',bq_text:'#666',hr:'#e0e0e0',table_head_bg:'#efefef',table_border:'#ddd' },
+    sizes:{h1:2.2,h2:1.6,h3:1.25,h4:1.0,p:1.0}, lh:1.8, paraSpace:0.8, margin:56,
+    fonts:{all:null},
+  },
+  academic: {
+    colors: { page_bg:'#fffef8',page_text:'#2c2c2c',h1:'#1a1a1a',h2:'#222',h3:'#333',p:'#2c2c2c',link:'#8b1a00',code_bg:'#f5f0e8',code_text:'#333',bq_border:'#8b1a00',bq_bg:'#fdf7f0',bq_text:'#555',hr:'#ccc',table_head_bg:'#f5f0e8',table_border:'#ccc' },
+    sizes:{h1:2.1,h2:1.6,h3:1.2,h4:1.0,p:1.0}, lh:1.85, paraSpace:0.8, margin:60,
+    fonts:{all:null},
+  },
+  elegant: {
+    colors: { page_bg:'#fdf8f1',page_text:'#3d3228',h1:'#1e1510',h2:'#3a2e24',h3:'#4a3e34',p:'#3d3228',link:'#7a4f1e',code_bg:'#ede8e0',code_text:'#444',bq_border:'#8b5e3c',bq_bg:'#f5efe8',bq_text:'#5c4a38',hr:'#d4c4b0',table_head_bg:'#ede8e0',table_border:'#c8b8a0' },
+    sizes:{h1:2.4,h2:1.8,h3:1.35,h4:1.05,p:1.05}, lh:1.9, paraSpace:0.85, margin:60,
+    fonts:{all:'Cormorant Garamond'},
+  },
+  dark: {
+    colors: { page_bg:'#1e1e1e',page_text:'#d4d4d4',h1:'#ffffff',h2:'#e8e8e8',h3:'#cccccc',p:'#d4d4d4',link:'#4fc1ff',code_bg:'#2d2d2d',code_text:'#ce9178',bq_border:'#569cd6',bq_bg:'#25252688',bq_text:'#aaaaaa',hr:'#444',table_head_bg:'#2a2a2a',table_border:'#444' },
+    sizes:{h1:2.1,h2:1.55,h3:1.25,h4:1.0,p:1.0}, lh:1.7, paraSpace:0.75, margin:52,
+    fonts:{all:null},
+  },
+  retro: {
+    colors: { page_bg:'#f4f0e0',page_text:'#3b2f1e',h1:'#5c3d11',h2:'#7a4f1a',h3:'#8a5e2a',p:'#3b2f1e',link:'#c0392b',code_bg:'#e8e0c8',code_text:'#333',bq_border:'#c0392b',bq_bg:'#fdf0ee',bq_text:'#555',hr:'#c4b08a',table_head_bg:'#e8e0c8',table_border:'#c4b08a' },
+    sizes:{h1:2.3,h2:1.7,h3:1.3,h4:1.05,p:1.0}, lh:1.8, paraSpace:0.8, margin:56,
+    fonts:{all:'EB Garamond'},
+  },
+  ocean: {
+    colors: { page_bg:'#f0f7ff',page_text:'#0d2b4e',h1:'#003366',h2:'#064a8a',h3:'#0a5fa0',p:'#0d2b4e',link:'#0077cc',code_bg:'#deeeff',code_text:'#003366',bq_border:'#0077cc',bq_bg:'#e8f4ff',bq_text:'#1a4a7a',hr:'#aed4f0',table_head_bg:'#deeeff',table_border:'#aed4f0' },
+    sizes:{h1:2.1,h2:1.6,h3:1.25,h4:1.0,p:1.0}, lh:1.75, paraSpace:0.8, margin:52,
+    fonts:{all:null},
+  },
+  forest: {
+    colors: { page_bg:'#f4f9f0',page_text:'#1e3a1e',h1:'#1a4a1a',h2:'#1e5a1e',h3:'#256525',p:'#1e3a1e',link:'#2d8a2d',code_bg:'#e4f0dc',code_text:'#1e3a1e',bq_border:'#2d8a2d',bq_bg:'#eaf5e4',bq_text:'#256525',hr:'#a8d4a0',table_head_bg:'#e4f0dc',table_border:'#a8d4a0' },
+    sizes:{h1:2.1,h2:1.6,h3:1.25,h4:1.0,p:1.0}, lh:1.8, paraSpace:0.8, margin:52,
+    fonts:{all:null},
+  },
+  rose: {
+    colors: { page_bg:'#fff8f9',page_text:'#3a1a20',h1:'#7a1a2a',h2:'#8a2535',h3:'#9e3545',p:'#3a1a20',link:'#c0395a',code_bg:'#fde8ec',code_text:'#5a1a25',bq_border:'#c0395a',bq_bg:'#fde8ec',bq_text:'#7a1a2a',hr:'#f0c0ca',table_head_bg:'#fde8ec',table_border:'#f0c0ca' },
+    sizes:{h1:2.2,h2:1.65,h3:1.3,h4:1.05,p:1.0}, lh:1.78, paraSpace:0.78, margin:52,
+    fonts:{all:null},
+  },
+};
+
+// ============================
+// HELPERS
+// ============================
+function id(x){ return document.getElementById(x); }
+function fontStack(el) {
+  const f = S.fonts[el] || S.fonts.all;
+  if (!f) return 'inherit';
+  const mono = ['Fira Code','JetBrains Mono','Source Code Pro','Inconsolata','Space Mono','IBM Plex Mono','Courier Prime','Roboto Mono','Ubuntu Mono','Anonymous Pro','Cutive Mono','Share Tech Mono','Nova Mono','Cousine','Overpass Mono','Nanum Gothic Coding','PT Mono','B612 Mono','DM Mono','Red Hat Mono','Azeret Mono','Chivo Mono','Fragment Mono','Martian Mono','Noto Sans Mono','Sometype Mono','Spline Sans Mono'];
+  const fallback = mono.includes(f) ? "'Courier New', monospace" : "Georgia, serif";
+  return `'${f}', ${fallback}`;
+}
+function togglePanel(pid) {
+  id(pid).classList.toggle('closed');
+}
+
+// ============================
+// FONT LIST
+// ============================
+function renderFontList() {
+  const q = id('font-search').value.toLowerCase().trim();
+  let items;
+  if (q) {
+    items = Object.entries(FONT_DB).flatMap(([cat, names]) =>
+      names.filter(n => n.toLowerCase().includes(q)).map(n => ({n, cat}))
+    );
+  } else {
+    items = (FONT_DB[S.cat] || []).map(n => ({n, cat: S.cat}));
+  }
+  const active = S.fonts[S.fontTarget] || S.fonts.all;
+  id('font-list').innerHTML = items.length
+    ? items.map(f =>
+        `<div class="font-item${f.n===active?' on':''}" onclick="selectFont('${f.n.replace(/'/g,"\\'")}')" style="font-family:'${f.n}',serif">
+          ${f.n}<span class="fi-cat">${f.cat}</span>
+        </div>`
+      ).join('')
+    : '<div style="padding:10px 12px;font-size:12px;color:#aaa;">No fonts found</div>';
+}
+
+function selCat(el) {
+  document.querySelectorAll('#cat-tabs .ptab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  S.cat = el.dataset.cat;
+  id('font-search').value = '';
+  renderFontList();
+}
+
+function selFontTarget(el) {
+  document.querySelectorAll('#font-target-tabs .ptab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  S.fontTarget = el.dataset.el;
+  renderFontList();
+}
+
+function selectFont(name) {
+  if (S.fontTarget === 'all') {
+    Object.keys(S.fonts).forEach(k => S.fonts[k] = name);
+  } else {
+    S.fonts[S.fontTarget] = name;
+  }
+  renderFontList();
+  loadFont(name, () => { buildCSS(); renderPreview(); });
+}
+
+function loadFont(name, cb) {
+  if (S.loaded.has(name)) { cb && cb(); return; }
+  id('font-loading').textContent = 'Loading ' + name + '…';
+  const slug = name.replace(/ /g, '+');
+  const lnk = document.createElement('link');
+  lnk.rel = 'stylesheet';
+  lnk.href = `https://fonts.googleapis.com/css2?family=${slug}:ital,wght@0,400;0,600;0,700;1,400&display=swap`;
+  lnk.onload = () => { S.loaded.add(name); id('font-loading').textContent = ''; cb && cb(); };
+  lnk.onerror = () => { id('font-loading').textContent = ''; };
+  document.head.appendChild(lnk);
+}
+
+// ============================
+// SIZE CONTROLS
+// ============================
+function renderSizeCtrl() {
+  const el = S.sizeElem;
+  const v = S.sizes[el];
+  id('size-ctrl-area').innerHTML = `
+    <div class="ctrl" style="margin-top:6px">
+      <label>${el.toUpperCase()} size</label>
+      <input type="range" min="0.6" max="4.5" step="0.05" value="${v}"
+        oninput="S.sizes['${el}']=+this.value; id('vl-sz').textContent=(+this.value).toFixed(2)+'em'; buildCSS()">
+      <span class="vv" id="vl-sz">${v.toFixed(2)}em</span>
+    </div>`;
+}
+
+function selSizeElem(el) {
+  document.querySelectorAll('#size-elem-tabs .ptab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  S.sizeElem = el.dataset.el;
+  renderSizeCtrl();
+}
+
+// ============================
+// COLOR CONTROLS
+// ============================
+const COLOR_MAP = {
+  page: [['page_bg','Background'],['page_text','Default text']],
+  h1: [['h1','H1 color']],
+  h2: [['h2','H2 color']],
+  h3: [['h3','H3 color']],
+  p: [['p','Body text']],
+  link: [['link','Link color']],
+  code: [['code_bg','Code background'],['code_text','Code text']],
+  bq: [['bq_border','Left border'],['bq_bg','Background'],['bq_text','Text color']],
+  hr: [['hr','Divider color'],['table_border','Table border'],['table_head_bg','Table header']],
+};
+
+function renderColorCtrl() {
+  const el = S.colorElem;
+  const fields = COLOR_MAP[el] || [];
+  id('color-ctrl-area').innerHTML = fields.map(([k,label]) =>
+    `<div class="ctrl" style="margin-top:8px">
+      <label>${label}</label>
+      <input type="color" value="${S.colors[k]}"
+        oninput="S.colors['${k}']=this.value; buildCSS()">
+    </div>`
+  ).join('');
+}
+
+function selColorElem(el) {
+  document.querySelectorAll('#color-elem-tabs .ptab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  S.colorElem = el.dataset.el;
+  renderColorCtrl();
+}
+
+// ============================
+// CSS GENERATION
+// ============================
+function buildCSS() {
+  const c = S.colors; const sz = S.sizes;
+  const sc = S.scale; const lh = S.lh; const ps = S.paraSpace;
+  const m = S.margin;
+
+  const css = `
+#preview-content {
+  font-size: ${sc}em;
+  color: ${c.page_text};
+  font-family: ${fontStack('p')};
+  line-height: ${lh};
+}
+#preview-content p {
+  margin: ${ps}em 0;
+  color: ${c.p};
+  font-size: ${sz.p}em;
+  font-family: ${fontStack('p')};
+  line-height: ${lh};
+}
+#preview-content h1 {
+  font-size: ${sz.h1}em; color: ${c.h1}; font-family: ${fontStack('h1')};
+  font-weight: 700; margin: 1.2em 0 0.4em; line-height: 1.15;
+  border-bottom: 1.5px solid ${c.hr}; padding-bottom: 0.3em;
+}
+#preview-content h2 {
+  font-size: ${sz.h2}em; color: ${c.h2}; font-family: ${fontStack('h2')};
+  font-weight: 700; margin: 1.1em 0 0.35em; line-height: 1.2;
+  border-bottom: 1px solid ${c.hr}; padding-bottom: 0.2em;
+}
+#preview-content h3 {
+  font-size: ${sz.h3}em; color: ${c.h3}; font-family: ${fontStack('h3')};
+  font-weight: 600; margin: 1em 0 0.3em; line-height: 1.3;
+}
+#preview-content h4 {
+  font-size: ${sz.h4}em; color: ${c.h3}; font-family: ${fontStack('h3')};
+  font-weight: 600; margin: 0.9em 0 0.25em; line-height: 1.35;
+}
+#preview-content h5, #preview-content h6 {
+  font-size: 1em; color: ${c.h3}; font-weight: 600; margin: 0.8em 0 0.2em;
+}
+#preview-content a { color: ${c.link}; text-decoration: underline; text-underline-offset: 2px; }
+#preview-content a:hover { opacity: 0.8; }
+#preview-content ul, #preview-content ol { padding-left: 1.8em; margin: ${ps*0.6}em 0; }
+#preview-content li { margin: 0.3em 0; }
+#preview-content li > p { margin: 0.2em 0; }
+#preview-content blockquote {
+  border-left: 3px solid ${c.bq_border}; background: ${c.bq_bg};
+  margin: ${ps}em 0; padding: 0.6em 1.1em; border-radius: 0 6px 6px 0;
+}
+#preview-content blockquote p { color: ${c.bq_text}; margin: 0.2em 0; font-size: ${sz.p}em; }
+#preview-content code {
+  background: ${c.code_bg}; color: ${c.code_text};
+  font-family: ${fontStack('code') !== 'inherit' ? fontStack('code') : "'Fira Code','Courier New',monospace"};
+  font-size: 0.87em; padding: 2px 6px; border-radius: 5px;
+}
+#preview-content pre {
+  background: ${c.code_bg}; padding: 14px 18px; border-radius: 8px;
+  overflow-x: auto; margin: ${ps}em 0; line-height: 1.6;
+}
+#preview-content pre code {
+  background: none; padding: 0; font-size: 0.9em;
+  color: ${c.code_text};
+  font-family: ${fontStack('code') !== 'inherit' ? fontStack('code') : "'Fira Code','Courier New',monospace"};
+}
+#preview-content table {
+  border-collapse: collapse; width: 100%; margin: ${ps}em 0; font-size: 0.95em;
+}
+#preview-content th, #preview-content td {
+  border: 1px solid ${c.table_border}; padding: 8px 14px; text-align: left;
+}
+#preview-content th { background: ${c.table_head_bg}; font-weight: 600; color: ${c.h2}; }
+#preview-content tr:nth-child(even) td { background: ${c.table_head_bg}55; }
+#preview-content hr { border: none; border-top: 1px solid ${c.hr}; margin: ${ps*2}em 0; }
+#preview-content strong { font-weight: 700; }
+#preview-content em { font-style: italic; }
+#preview-content del { text-decoration: line-through; opacity: 0.6; }
+#preview-content img { max-width: 100%; border-radius: 4px; display: block; margin: ${ps}em 0; }
+#paper { background: ${c.page_bg}; padding: ${m}px ${Math.round(m*1.15)}px; }
+  `;
+
+  let tag = id('dyn-style');
+  if (!tag) { tag = document.createElement('style'); tag.id = 'dyn-style'; document.head.appendChild(tag); }
+  tag.textContent = css;
+  window._lastCSS = css;
+  window._printFonts = [...S.loaded];
+}
+
+// ============================
+// MARKED SETUP
+// ============================
+(function setupMarked() {
+  const renderer = new marked.Renderer();
+  // Task list items
+  const origListItem = renderer.listitem.bind(renderer);
+  renderer.listitem = function(text, task, checked) {
+    if (task) {
+      return `<li style="list-style:none;margin-left:-1.2em"><input type="checkbox" ${checked?'checked':''} disabled style="margin-right:6px"> ${text}</li>`;
+    }
+    return `<li>${text}</li>`;
+  };
+  marked.use({
+    renderer,
+    gfm: true,
+    breaks: false,
+    pedantic: false,
+  });
+})();
+
+function renderPreview() {
+  const md = id('editor').value;
+  id('preview-content').innerHTML = marked.parse(md);
+}
+
+// ============================
+// VIEW SWITCHING
+// ============================
+function setView(mode, btn) {
+  document.querySelectorAll('.vtab').forEach(t => t.classList.remove('on'));
+  btn.classList.add('on');
+  S.view = mode;
+  const ca = id('content-area');
+  const ed = id('editor');
+  const pv = id('preview-pane');
+  ca.className = 'content';
+  if (mode === 'edit') {
+    ed.style.display = 'block'; pv.style.display = 'none';
+  } else if (mode === 'preview') {
+    ed.style.display = 'none'; pv.style.display = 'block';
+    renderPreview();
+  } else { // split
+    ca.classList.add('split-mode');
+    ed.style.display = 'block'; pv.style.display = 'block';
+    renderPreview();
+  }
+}
+
+// ============================
+// PAPER SIZE
+// ============================
+function setPaper(val) {
+  S.paperSize = val;
+  id('paper').className = 'paper ' + val;
+  id('paper-size').value = val;
+  id('paper-size2').value = val;
+}
+
+// ============================
+// APPLY THEME
+// ============================
+function applyTheme(name, btn) {
+  document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const t = THEMES[name];
+  if (!t) return;
+
+  Object.assign(S.colors, t.colors);
+  Object.assign(S.sizes, t.sizes);
+  S.lh = t.lh;
+  S.paraSpace = t.paraSpace;
+  S.margin = t.margin;
+
+  id('line-height').value = S.lh;
+  id('vl-lh').textContent = S.lh.toFixed(2);
+  id('para-space').value = S.paraSpace;
+  id('vl-ps').textContent = S.paraSpace.toFixed(2) + 'em';
+  id('page-margin').value = S.margin;
+  id('vl-mg').textContent = S.margin + 'px';
+
+  if (t.fonts.all) {
+    Object.keys(S.fonts).forEach(k => S.fonts[k] = t.fonts.all);
+    loadFont(t.fonts.all, () => { buildCSS(); renderPreview(); });
+  } else {
+    buildCSS(); renderPreview();
+  }
+  renderSizeCtrl();
+  renderColorCtrl();
+  renderFontList();
+}
+
+// ============================
+// SAVE AS PDF
+// ============================
+function savePDF() {
+  // Make sure preview is rendered
+  renderPreview();
+  const html = marked.parse(id('editor').value);
+  const c = S.colors;
+  const m = S.margin;
+  const pm = Math.round(m * 1.15);
+
+  const paperDims = {
+    A4:     ['210mm','297mm'],
+    A3:     ['297mm','420mm'],
+    Letter: ['8.5in','11in'],
+    Legal:  ['8.5in','14in'],
+  }[S.paperSize] || ['210mm','297mm'];
+
+  // Collect all loaded fonts
+  const allFonts = [...new Set(Object.values(S.fonts).filter(Boolean))];
+  const gfLinks = allFonts.map(f => {
+    const slug = f.replace(/ /g, '+');
+    return `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${slug}:ital,wght@0,400;0,600;0,700;1,400&display=swap">`;
+  }).join('\n');
+
+  // Build print CSS from current state (reuse _lastCSS, strip #paper rule, replace selectors)
+  const printCSS = (window._lastCSS || '').replace(/#paper\s*\{[^}]*\}/g, '');
+
+  const doc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+${gfLinks}
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{background:${c.page_bg};-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:${paperDims[0]} ${paperDims[1]};margin:${m}px ${pm}px}
+body{font-size:16px;padding:0;margin:0}
+#preview-content{word-wrap:break-word;overflow-wrap:break-word}
+#preview-content img{max-width:100%}
+${printCSS}
+#preview-content table{page-break-inside:avoid}
+#preview-content h1,#preview-content h2,#preview-content h3{page-break-after:avoid}
+</style>
+</head>
+<body>
+<div id="preview-content">${html}</div>
+</body>
+</html>`;
+
+  const frame = id('print-frame');
+  frame.style.display = 'block';
+  const fd = frame.contentDocument;
+  fd.open(); fd.write(doc); fd.close();
+  // Wait for fonts to load in iframe before printing
+  setTimeout(() => { frame.contentWindow.print(); frame.style.display = 'none'; }, 1000);
+}
+
+// ============================
+// INIT
+// ============================
+function init() {
+  renderFontList();
+  renderSizeCtrl();
+  renderColorCtrl();
+  buildCSS();
+  renderPreview();
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
