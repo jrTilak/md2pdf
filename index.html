@@ -7,6 +7,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
+<!-- KaTeX math rendering -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<!-- Syntax highlighting -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+<!-- Mermaid diagrams -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
 <style>
 /* ===== RESET ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -162,6 +169,27 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #bbb; }
+
+/* ===== MATH (KaTeX) ===== */
+.math-block { text-align: left; overflow-x: auto; margin: 0.6em 0; }
+.math-block .katex-display { text-align: left !important; margin: 0 !important; }
+.katex-display { text-align: left !important; }
+.math-error { color: #c00; background: #fee; padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 0.88em; }
+
+/* ===== MERMAID ===== */
+#preview-content .mermaid { margin: 0.75em 0; overflow-x: auto; }
+#preview-content .mermaid svg { max-width: 100%; }
+
+/* ===== WORD COUNT ===== */
+.wc-badge { font-size: 11px; color: #aaa; padding: 4px 8px; white-space: nowrap; flex-shrink: 0; }
+
+/* ===== SIDEBAR TOGGLE ===== */
+.sidebar-toggle { padding: 5px 9px; font-size: 15px; cursor: pointer; background: #fff; color: #888; border: 1px solid #e0e0e0; border-radius: 8px; transition: all 0.1s; line-height: 1; user-select: none; flex-shrink: 0; }
+.sidebar-toggle:hover { border-color: #5b4dff; color: #5b4dff; }
+.sidebar.hidden { display: none; }
+
+/* ===== KEYBOARD HINT ===== */
+kbd { display: inline-block; padding: 1px 5px; font-size: 10px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; color: #555; font-family: monospace; }
 </style>
 </head>
 <body>
@@ -189,6 +217,10 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
           <button class="tbtn" onclick="applyTheme('ocean',this)">Ocean</button>
           <button class="tbtn" onclick="applyTheme('forest',this)">Forest</button>
           <button class="tbtn" onclick="applyTheme('rose',this)">Rose</button>
+          <button class="tbtn" onclick="applyTheme('solarized',this)">Solarized</button>
+          <button class="tbtn" onclick="applyTheme('nord',this)">Nord</button>
+          <button class="tbtn" onclick="applyTheme('dracula',this)">Dracula</button>
+          <button class="tbtn" onclick="applyTheme('slate',this)">Slate</button>
         </div>
       </div>
     </div>
@@ -282,7 +314,7 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
         <div class="ctrl">
           <label>Page margin</label>
           <input type="range" id="page-margin" min="20" max="100" step="4" value="52"
-            oninput="S.margin=+this.value; id('vl-mg').textContent=this.value+'px'; buildCSS()">
+            oninput="S.margin=+this.value; id('vl-mg').textContent=this.value+'px'; buildCSS(); ensurePreviewVisible()">
           <span class="vv" id="vl-mg">52px</span>
         </div>
         <div class="ctrl">
@@ -294,6 +326,7 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
             <option value="Legal">US Legal</option>
           </select>
         </div>
+        <div style="font-size:10px;color:#888;padding-top:4px;">Tip: switch to <strong>Split</strong> or <strong>Preview</strong> to see layout changes.</div>
       </div>
     </div>
 
@@ -303,12 +336,14 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
 <!-- ======== MAIN ======== -->
 <div class="main">
   <div class="toolbar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
     <div class="view-grp">
       <button class="vtab on" onclick="setView('edit',this)">Edit</button>
-      <button class="vtab" onclick="setView('split',this)">Split</button>
+      <button class="vtab" id="split-tab" onclick="setView('split',this)">Split</button>
       <button class="vtab" onclick="setView('preview',this)">Preview</button>
     </div>
     <div class="sp"></div>
+    <span class="wc-badge" id="wc-badge">0 words</span>
     <select class="paper-sel" id="paper-size" onchange="setPaper(this.value)">
       <option value="A4" selected>A4</option>
       <option value="A3">A3</option>
@@ -319,17 +354,90 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
   </div>
 
   <div class="content" id="content-area">
-    <textarea id="editor" spellcheck="false" oninput="renderPreview()" placeholder="Paste or type your Markdown here…">
+    <textarea id="editor" spellcheck="false" oninput="renderPreview(); updateWordCount(); localStorage.setItem('md2pdf_content',this.value)" placeholder="Paste or type your Markdown here…">
 # Welcome to Markdown → PDF
 
-A powerful converter with **100+ Google Fonts** and full per-element customization.
+A powerful converter with **100+ Google Fonts**, syntax highlighting, math equations, and diagrams.
 
-## What You Can Do
+## What's New ✨
 
-- ✅ Paste markdown and see a **real-time preview**
-- ✅ Pick any Google Font — including beautiful **handwritten** styles
-- ✅ Set font, size, and color **per element** (H1, H2, body, links…)
-- ✅ Choose paper size and download a clean **PDF**
+- 🧮 **KaTeX math** — inline `$...$` and block `$$...$$` equations
+- 🎨 **Syntax highlighting** — auto-colored code blocks for 180+ languages
+- 📊 **Mermaid diagrams** — flowcharts, sequence diagrams, and more
+- 🎭 **13 themes** — including Nord, Dracula, Solarized, and Slate
+- 💾 **Auto-save** — your work is preserved across browser sessions
+- ⌨️ **Ctrl+S** — keyboard shortcut to download PDF
+
+---
+
+## Math Equations (KaTeX)
+
+Inline math: The energy–mass relation is $E = mc^2$, and the Pythagorean theorem states $a^2 + b^2 = c^2$.
+
+Block equation (left-aligned):
+
+$$\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}$$
+
+The quadratic formula:
+
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+
+Maxwell's equations in differential form:
+
+$$\nabla \cdot \mathbf{E} = \frac{\rho}{\varepsilon_0}$$
+
+---
+
+## Syntax Highlighting
+
+```python
+def fibonacci(n: int) -> list[int]:
+    """Generate Fibonacci sequence up to n terms."""
+    seq = [0, 1]
+    while len(seq) < n:
+        seq.append(seq[-1] + seq[-2])
+    return seq[:n]
+
+print(fibonacci(10))
+```
+
+```javascript
+const fetchData = async (url) => {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('Fetch failed:', err);
+  }
+};
+```
+
+```bash
+# Install dependencies and run
+npm install && npm run build
+git commit -am "feat: add KaTeX support"
+```
+
+---
+
+## Mermaid Diagrams
+
+```mermaid
+flowchart LR
+    A[Write Markdown] --> B{Preview OK?}
+    B -- Yes --> C[Download PDF]
+    B -- No --> D[Adjust Settings]
+    D --> A
+```
+
+```mermaid
+sequenceDiagram
+    User->>Editor: Type markdown
+    Editor->>Preview: Live render
+    Preview-->>User: See formatted output
+    User->>PDF: Ctrl+S
+```
 
 ---
 
@@ -337,52 +445,35 @@ A powerful converter with **100+ Google Fonts** and full per-element customizati
 
 ### Tables
 
-| Element | Customizable | Notes |
-|---------|:---:|-------|
-| Headings H1–H4 | ✓ | Font, size, color |
-| Body text | ✓ | Font, scale, line-height |
-| Links | ✓ | Color |
-| Code blocks | ✓ | Font, background |
-| Blockquotes | ✓ | Border, bg, text color |
+| Feature | Status | Notes |
+|---------|:------:|-------|
+| KaTeX math | ✅ | Inline & block, left-aligned |
+| Syntax highlighting | ✅ | 180+ languages via highlight.js |
+| Mermaid diagrams | ✅ | Flowcharts, sequences, and more |
+| Google Fonts | ✅ | 100+ fonts, per-element |
+| 13 Themes | ✅ | Dark, light, and specialty |
+| Auto-save | ✅ | localStorage persistence |
 
 ### Task List
 
 - [x] Open the converter
-- [x] Pick a font from the sidebar
-- [ ] Write some notes
-- [ ] Download as PDF
+- [x] Pick a theme from the sidebar
+- [x] Write math equations with `$$...$$`
+- [ ] Add a Mermaid diagram
+- [ ] Download as PDF with **Ctrl+S**
 
 ### Blockquote
 
-> "Simplicity is the ultimate sophistication."
-> — Leonardo da Vinci
-
-### Code Block
-
-```js
-function greet(name) {
-  return `Hello, ${name}! Welcome to Markdown PDF.`;
-}
-console.log(greet("world"));
-```
-
-Inline `code` works too — great for technical notes.
+> "Any sufficiently advanced technology is indistinguishable from magic."
+> — Arthur C. Clarke
 
 ### Text Styles
 
-**Bold text**, *italic text*, ~~strikethrough~~, and `inline code`.
-
-### Ordered List
-
-1. Choose a theme from the sidebar
-2. Search for a Google Font you love
-3. Adjust sizes using the scale slider
-4. Switch to Preview tab
-5. Click **Save as PDF**
+**Bold**, *italic*, ~~strikethrough~~, `inline code`, and $x^2 + y^2 = r^2$ (inline math).
 
 ---
 
-*Try the **Handwritten** font category for a personal journal feel!*
+*Use the sidebar to pick fonts, adjust typography, change paper size, and switch themes.*
     </textarea>
     <div id="preview-pane">
       <div class="paper A4" id="paper">
@@ -537,6 +628,26 @@ const THEMES = {
   rose: {
     colors: { page_bg:'#fff8f9',page_text:'#3a1a20',h1:'#7a1a2a',h2:'#8a2535',h3:'#9e3545',p:'#3a1a20',link:'#c0395a',code_bg:'#fde8ec',code_text:'#5a1a25',bq_border:'#c0395a',bq_bg:'#fde8ec',bq_text:'#7a1a2a',hr:'#f0c0ca',table_head_bg:'#fde8ec',table_border:'#f0c0ca' },
     sizes:{h1:2.2,h2:1.65,h3:1.3,h4:1.05,p:1.0}, lh:1.78, paraSpace:0.78, margin:52,
+    fonts:{all:null},
+  },
+  solarized: {
+    colors: { page_bg:'#fdf6e3',page_text:'#657b83',h1:'#268bd2',h2:'#2aa198',h3:'#859900',p:'#657b83',link:'#268bd2',code_bg:'#eee8d5',code_text:'#586e75',bq_border:'#268bd2',bq_bg:'#f5f0dc',bq_text:'#586e75',hr:'#ccc0a0',table_head_bg:'#eee8d5',table_border:'#ccc0a0' },
+    sizes:{h1:2.1,h2:1.6,h3:1.25,h4:1.0,p:1.0}, lh:1.8, paraSpace:0.8, margin:56,
+    fonts:{all:null},
+  },
+  nord: {
+    colors: { page_bg:'#2e3440',page_text:'#d8dee9',h1:'#88c0d0',h2:'#81a1c1',h3:'#5e81ac',p:'#d8dee9',link:'#88c0d0',code_bg:'#3b4252',code_text:'#d8dee9',bq_border:'#81a1c1',bq_bg:'#3b425266',bq_text:'#adb8cc',hr:'#4c566a',table_head_bg:'#3b4252',table_border:'#4c566a' },
+    sizes:{h1:2.1,h2:1.55,h3:1.25,h4:1.0,p:1.0}, lh:1.7, paraSpace:0.75, margin:52,
+    fonts:{all:null},
+  },
+  dracula: {
+    colors: { page_bg:'#282a36',page_text:'#f8f8f2',h1:'#ff79c6',h2:'#bd93f9',h3:'#8be9fd',p:'#f8f8f2',link:'#50fa7b',code_bg:'#44475a',code_text:'#f8f8f2',bq_border:'#6272a4',bq_bg:'#44475a88',bq_text:'#ccc',hr:'#44475a',table_head_bg:'#44475a',table_border:'#6272a4' },
+    sizes:{h1:2.1,h2:1.55,h3:1.25,h4:1.0,p:1.0}, lh:1.7, paraSpace:0.75, margin:52,
+    fonts:{all:null},
+  },
+  slate: {
+    colors: { page_bg:'#f8f9fa',page_text:'#343a40',h1:'#212529',h2:'#343a40',h3:'#495057',p:'#343a40',link:'#0077cc',code_bg:'#e9ecef',code_text:'#212529',bq_border:'#6c757d',bq_bg:'#f1f3f5',bq_text:'#495057',hr:'#dee2e6',table_head_bg:'#e9ecef',table_border:'#dee2e6' },
+    sizes:{h1:2.1,h2:1.6,h3:1.25,h4:1.0,p:1.0}, lh:1.75, paraSpace:0.78, margin:54,
     fonts:{all:null},
   },
 };
@@ -752,7 +863,8 @@ function buildCSS() {
 #preview-content em { font-style: italic; }
 #preview-content del { text-decoration: line-through; opacity: 0.6; }
 #preview-content img { max-width: 100%; border-radius: 4px; display: block; margin: ${ps}em 0; }
-#paper { background: ${c.page_bg}; padding: ${m}px ${Math.round(m*1.15)}px; }
+#paper { background: ${c.page_bg}; padding: ${m}px ${Math.round(m*1.15)}px; font-size: 16px; }
+#preview-content .hljs { background: ${c.code_bg} !important; }
   `;
 
   let tag = id('dyn-style');
@@ -760,6 +872,7 @@ function buildCSS() {
   tag.textContent = css;
   window._lastCSS = css;
   window._printFonts = [...S.loaded];
+  applyHljsTheme();
 }
 
 // ============================
@@ -767,6 +880,15 @@ function buildCSS() {
 // ============================
 (function setupMarked() {
   const renderer = new marked.Renderer();
+  // Mermaid code blocks → special div, other code blocks → standard pre/code
+  renderer.code = function(code, lang, escaped) {
+    if (lang === 'mermaid') {
+      return '<div class="mermaid">' + code + '</div>\n';
+    }
+    const langAttr = lang ? ' class="language-' + lang + '"' : '';
+    const safe = escaped ? code : code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<pre><code' + langAttr + '>' + safe + '</code></pre>\n';
+  };
   // Task list items
   const origListItem = renderer.listitem.bind(renderer);
   renderer.listitem = function(text, task, checked) {
@@ -785,7 +907,134 @@ function buildCSS() {
 
 function renderPreview() {
   const md = id('editor').value;
-  id('preview-content').innerHTML = marked.parse(md);
+  id('preview-content').innerHTML = processMarkdown(md);
+  // Syntax highlighting
+  if (window.hljs) {
+    id('preview-content').querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+  }
+  // Mermaid diagrams
+  if (window.mermaid) {
+    const nodes = id('preview-content').querySelectorAll('.mermaid');
+    if (nodes.length) mermaid.run({ nodes });
+  }
+}
+
+// ============================
+// MATH PROCESSING (KaTeX)
+// ============================
+function escRx(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function processMarkdown(md) {
+  if (!window.katex) return marked.parse(md);
+
+  const protected_items = [];
+
+  // Protect fenced code blocks first so math inside them is ignored
+  let safe = md.replace(/```[\s\S]*?```/g, m => {
+    const idx = protected_items.length;
+    protected_items.push(m);
+    return '\x02P' + idx + '\x03';
+  });
+  // Protect inline code spans
+  safe = safe.replace(/`[^`\n]+`/g, m => {
+    const idx = protected_items.length;
+    protected_items.push(m);
+    return '\x02P' + idx + '\x03';
+  });
+
+  // Extract block math $$...$$
+  const maths = [];
+  safe = safe.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => {
+    const idx = maths.length;
+    maths.push({ type: 'block', math: math.trim() });
+    return '\x02MB' + idx + '\x03';
+  });
+  // Extract inline math $...$ (require non-space at content boundaries to avoid e.g. "$5 to $10")
+  // Note: uses only lookaheads (no lookbehinds) for broad browser compatibility
+  safe = safe.replace(/\$(?!\s)([^$\n]+?)\$(?!\$)/g, (match, math) => {
+    // Skip if content ends with whitespace (handles "$ 5 to $ 10" type false positives)
+    if (/\s$/.test(math)) return match;
+    const idx = maths.length;
+    maths.push({ type: 'inline', math: math.trim() });
+    return '\x02MI' + idx + '\x03';
+  });
+
+  // Restore protected code so marked processes it normally
+  protected_items.forEach((item, i) => {
+    safe = safe.split('\x02P' + i + '\x03').join(item);
+  });
+
+  // Parse with marked
+  let html = marked.parse(safe);
+
+  // Replace math placeholders with KaTeX-rendered HTML
+  maths.forEach((entry, i) => {
+    const key = entry.type === 'block' ? '\x02MB' + i + '\x03' : '\x02MI' + i + '\x03';
+    let rendered;
+    try {
+      if (entry.type === 'block') {
+        rendered = '<div class="math-block">' +
+          katex.renderToString(entry.math, { displayMode: true, throwOnError: false }) +
+          '</div>';
+        // When the placeholder is the sole content of a <p>, replace the whole <p>
+        html = html.replace(new RegExp('<p>\\s*' + escRx(key) + '\\s*<\\/p>', 'g'), rendered);
+      } else {
+        rendered = katex.renderToString(entry.math, { displayMode: false, throwOnError: false });
+      }
+    } catch (e) {
+      rendered = '<span class="math-error">$' + entry.math + '$</span>';
+    }
+    html = html.split(key).join(rendered);
+  });
+
+  return html;
+}
+
+// ============================
+// WORD COUNT
+// ============================
+function updateWordCount() {
+  const text = id('editor').value.trim();
+  const words = text ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
+  id('wc-badge').textContent = words.toLocaleString() + (words === 1 ? ' word' : ' words');
+}
+
+// ============================
+// SIDEBAR TOGGLE
+// ============================
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('hidden');
+}
+
+// ============================
+// HLJS THEME (auto dark/light)
+// ============================
+function applyHljsTheme() {
+  if (!window.hljs) return;
+  const bg = S.colors.page_bg;
+  const r = parseInt(bg.slice(1, 3), 16) || 255;
+  const g = parseInt(bg.slice(3, 5), 16) || 255;
+  const b = parseInt(bg.slice(5, 7), 16) || 255;
+  const luma = (r * 299 + g * 587 + b * 114) / 1000; // ITU BT.601 luminance
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/';
+  const theme = luma < 128 ? base + 'atom-one-dark.min.css' : base + 'github.min.css';
+  let tag = id('hljs-theme');
+  if (!tag) {
+    tag = document.createElement('link');
+    tag.id = 'hljs-theme';
+    tag.rel = 'stylesheet';
+    document.head.appendChild(tag);
+  }
+  if (tag.href !== theme) tag.href = theme;
+}
+
+// ============================
+// ENSURE PREVIEW VISIBLE
+// ============================
+function ensurePreviewVisible() {
+  if (S.view === 'edit') setView('split', id('split-tab'));
 }
 
 // ============================
@@ -819,6 +1068,9 @@ function setPaper(val) {
   id('paper').className = 'paper ' + val;
   id('paper-size').value = val;
   id('paper-size2').value = val;
+  buildCSS();
+  renderPreview();
+  ensurePreviewVisible();
 }
 
 // ============================
@@ -868,7 +1120,7 @@ function savePDF() {
   }
 
   renderPreview();
-  const html = marked.parse(id('editor').value);
+  const html = processMarkdown(id('editor').value);
   const c  = S.colors;
   const m  = S.margin;              // vertical margin, px
   const pm = Math.round(m * 1.15); // horizontal margin, px
@@ -888,12 +1140,12 @@ function savePDF() {
   // Content width in CSS pixels for the off-screen render target
   const contentWpx = Math.round((paperDims.w - 2 * mmH) * 96 / 25.4);
 
-  // Build scoped CSS: drop the #paper padding rule and rename the selector
+  // Build scoped CSS: drop the #paper rule and rename the selector
   const printCSS = (window._lastCSS || '')
     .replace(/#paper\s*\{[^}]*\}/g, '')
     .replace(/#preview-content/g, '#pdf-content');
 
-  // Off-screen container at exact paper content width
+  // Off-screen container at exact paper content width (16px base matches buildCSS #paper)
   const wrapper = document.createElement('div');
   wrapper.style.cssText =
     `position:fixed;top:-99999px;left:-99999px;` +
@@ -901,6 +1153,11 @@ function savePDF() {
   wrapper.innerHTML =
     `<div id="pdf-content" style="word-wrap:break-word;overflow-wrap:break-word">${html}</div>`;
   document.body.appendChild(wrapper);
+
+  // Apply syntax highlighting to the off-screen content
+  if (window.hljs) {
+    wrapper.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+  }
 
   const styleEl = document.createElement('style');
   styleEl.textContent =
@@ -962,11 +1219,29 @@ function savePDF() {
 // INIT
 // ============================
 function init() {
+  // Restore saved content from last session
+  const saved = localStorage.getItem('md2pdf_content');
+  if (saved !== null) id('editor').value = saved;
+
+  // Initialize mermaid
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  }
+
+  // Keyboard shortcut: Ctrl+S / Cmd+S → download PDF
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      savePDF();
+    }
+  });
+
   renderFontList();
   renderSizeCtrl();
   renderColorCtrl();
   buildCSS();
   renderPreview();
+  updateWordCount();
 }
 document.addEventListener('DOMContentLoaded', init);
 </script>
