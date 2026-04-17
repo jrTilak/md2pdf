@@ -383,7 +383,7 @@ kbd { display: inline-block; padding: 1px 5px; font-size: 10px; border: 1px soli
       <input type="checkbox" id="pageless-cb" onchange="setPageless(this.checked)">
       Pageless
     </label>
-    <button class="print-btn" onclick="printDocument()">🖨 Print</button>
+    <button class="print-btn" onclick="printDocument()" aria-label="Print document">🖨 Print</button>
     <button class="pdf-btn" onclick="savePDF()">↓ Save as PDF</button>
   </div>
 
@@ -598,7 +598,7 @@ const S = {
   scale: 1.0,
   lh: 1.7,
   paraSpace: 0.75,
-  padding: 52,
+  padding: DEFAULT_PADDING,
   printMargin: 0,
   paperSize: 'A4',
   pageless: false,
@@ -694,6 +694,7 @@ const THEMES = {
 function id(x){ return document.getElementById(x); }
 // CSS reference pixel density is 96 DPI, so 1px = 25.4/96 mm.
 const PX_TO_MM = 25.4 / 96;
+const DEFAULT_PADDING = 52;
 function fontStack(el) {
   const f = S.fonts[el] || S.fonts.all;
   if (!f) return 'inherit';
@@ -1147,7 +1148,7 @@ function applyTheme(name, btn) {
     // Backward compatibility with existing theme definitions.
     S.padding = t.margin;
   } else {
-    S.padding = 52;
+    S.padding = DEFAULT_PADDING;
   }
 
   id('line-height').value = S.lh;
