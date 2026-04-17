@@ -129,6 +129,12 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui,
   cursor: pointer; transition: background 0.15s;
 }
 .pdf-btn:hover { background: #4a3de0; }
+.print-btn {
+  padding: 7px 14px; font-size: 12px; font-weight: 600; letter-spacing: 0.1px;
+  background: #fff; color: #444; border: 1px solid #d6d6d6; border-radius: 8px;
+  cursor: pointer; transition: all 0.15s;
+}
+.print-btn:hover { border-color: #5b4dff; color: #5b4dff; }
 .content { flex: 1; display: flex; overflow: hidden; }
 
 /* ===== EDITOR ===== */
@@ -322,10 +328,16 @@ kbd { display: inline-block; padding: 1px 5px; font-size: 10px; border: 1px soli
       <div class="ph" onclick="togglePanel('p-page')">Page Layout <span class="arr">▾</span></div>
       <div class="pb" style="padding-top:10px;">
         <div class="ctrl">
-          <label>Page margin</label>
-          <input type="range" id="page-margin" min="20" max="100" step="4" value="52"
-            oninput="S.margin=+this.value; id('vl-mg').textContent=this.value+'px'; buildCSS(); ensurePreviewVisible()">
-          <span class="vv" id="vl-mg">52px</span>
+          <label>Content padding</label>
+          <input type="range" id="page-padding" min="20" max="120" step="4" value="52"
+            oninput="S.padding=+this.value; id('vl-pad').textContent=this.value+'px'; buildCSS(); ensurePreviewVisible()">
+          <span class="vv" id="vl-pad">52px</span>
+        </div>
+        <div class="ctrl">
+          <label>Print margin</label>
+          <input type="range" id="print-margin" min="0" max="60" step="2" value="0"
+            oninput="S.printMargin=+this.value; id('vl-pm').textContent=this.value+'px'; ensurePreviewVisible()">
+          <span class="vv" id="vl-pm">0px</span>
         </div>
         <div class="ctrl">
           <label>Paper size</label>
@@ -371,7 +383,8 @@ kbd { display: inline-block; padding: 1px 5px; font-size: 10px; border: 1px soli
       <input type="checkbox" id="pageless-cb" onchange="setPageless(this.checked)">
       Pageless
     </label>
-    <button class="pdf-btn" onclick="savePDF()">↓ Save as PDF</button>
+    <button class="print-btn" onclick="printDocument()" aria-label="Print document">Print</button>
+    <button class="pdf-btn" onclick="savePDF()" aria-label="Save document as PDF">↓ Save as PDF</button>
   </div>
 
   <div class="content" id="content-area">
@@ -585,7 +598,8 @@ const S = {
   scale: 1.0,
   lh: 1.7,
   paraSpace: 0.75,
-  margin: 52,
+  padding: DEFAULT_PADDING,
+  printMargin: 0,
   paperSize: 'A4',
   pageless: false,
   loaded: new Set(),
@@ -678,6 +692,11 @@ const THEMES = {
 // HELPERS
 // ============================
 function id(x){ return document.getElementById(x); }
+// CSS reference pixel density is 96 DPI, so 1px = 25.4/96 mm.
+const PX_TO_MM = 25.4 / 96;
+const DEFAULT_PADDING = 52;
+// Cleanup fallback when some browsers do not reliably fire afterprint.
+const PRINT_CLEANUP_TIMEOUT_MS = 30000;
 function fontStack(el) {
   const f = S.fonts[el] || S.fonts.all;
   if (!f) return 'inherit';
@@ -811,7 +830,7 @@ function selColorElem(el) {
 function buildCSS() {
   const c = S.colors; const sz = S.sizes;
   const sc = S.scale; const lh = S.lh; const ps = S.paraSpace;
-  const m = S.margin;
+  const pad = S.padding;
 
   const css = `
 #preview-content {
@@ -885,7 +904,7 @@ function buildCSS() {
 #preview-content em { font-style: italic; }
 #preview-content del { text-decoration: line-through; opacity: 0.6; }
 #preview-content img { max-width: 100%; border-radius: 4px; display: block; margin: ${ps}em 0; }
-#paper { background: ${c.page_bg}; padding: ${m}px ${Math.round(m*1.15)}px; font-size: 16px; }
+#paper { background: ${c.page_bg}; padding: ${pad}px ${Math.round(pad*1.15)}px; font-size: 16px; }
 #preview-content .hljs { background: ${c.code_bg} !important; }
   `;
 
@@ -1125,14 +1144,22 @@ function applyTheme(name, btn) {
   Object.assign(S.sizes, t.sizes);
   S.lh = t.lh;
   S.paraSpace = t.paraSpace;
-  S.margin = t.margin;
+  if (typeof t.padding === 'number') {
+    // Prefer new `padding` if present, keep `margin` only for legacy themes.
+    S.padding = t.padding;
+  } else if (typeof t.margin === 'number') {
+    // Backward compatibility with existing theme definitions.
+    S.padding = t.margin;
+  } else {
+    S.padding = DEFAULT_PADDING;
+  }
 
   id('line-height').value = S.lh;
   id('vl-lh').textContent = S.lh.toFixed(2);
   id('para-space').value = S.paraSpace;
   id('vl-ps').textContent = S.paraSpace.toFixed(2) + 'em';
-  id('page-margin').value = S.margin;
-  id('vl-mg').textContent = S.margin + 'px';
+  id('page-padding').value = S.padding;
+  id('vl-pad').textContent = S.padding + 'px';
 
   if (t.fonts.all) {
     Object.keys(S.fonts).forEach(k => S.fonts[k] = t.fonts.all);
@@ -1148,6 +1175,83 @@ function applyTheme(name, btn) {
 // ============================
 // SAVE AS PDF
 // ============================
+function getPaperDims() {
+  return {
+    A4:     { w: 210,   h: 297,   css: 'A4' },
+    A3:     { w: 297,   h: 420,   css: 'A3' },
+    Letter: { w: 215.9, h: 279.4, css: 'letter' },
+    Legal:  { w: 215.9, h: 355.6, css: 'legal' },
+  }[S.paperSize] || { w: 210, h: 297, css: 'A4' };
+}
+
+function printDocument() {
+  renderPreview();
+  const c = S.colors;
+  const padV = S.padding;
+  const padH = Math.round(padV * 1.15);
+  const marginPx = S.printMargin;
+  const marginMm = marginPx * PX_TO_MM;
+  const paper = getPaperDims();
+  const printCSS = (window._lastCSS || '')
+    .replace(/#paper\s*\{[^}]*\}/g, '')
+    .replace(/#preview-content/g, '#print-content');
+
+  const root = document.createElement('div');
+  root.id = 'print-root';
+  root.innerHTML = `<div id="print-page"><div id="print-content">${id('preview-content').innerHTML}</div></div>`;
+  document.body.appendChild(root);
+
+  const styleEl = document.createElement('style');
+  styleEl.id = 'print-style';
+  styleEl.textContent = `
+@media screen {
+  #print-root { display: none !important; }
+}
+@media print {
+  @page { size: ${paper.css}; margin: ${marginMm.toFixed(2)}mm; }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: ${c.page_bg} !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body > *:not(#print-root):not(#print-style) { display: none !important; }
+  #print-root {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  #print-page {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 !important;
+    padding: ${padV}px ${padH}px;
+    background: ${c.page_bg};
+    color: ${c.page_text};
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+  #print-content img { max-width: 100%; }
+}
+${printCSS}`;
+  document.head.appendChild(styleEl);
+
+  let cleanupTimer;
+  const cleanup = () => {
+    if (cleanupTimer) clearTimeout(cleanupTimer);
+    window.removeEventListener('afterprint', cleanup);
+    root.remove();
+    styleEl.remove();
+  };
+  cleanupTimer = setTimeout(cleanup, PRINT_CLEANUP_TIMEOUT_MS);
+  window.addEventListener('afterprint', cleanup);
+  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+}
+
 function savePDF() {
   const btn = document.querySelector('.pdf-btn');
   btn.disabled = true;
@@ -1161,23 +1265,16 @@ function savePDF() {
   renderPreview();
   const html = processMarkdown(id('editor').value);
   const c  = S.colors;
-  const m  = S.margin;              // vertical margin, px
-  const pm = Math.round(m * 1.15); // horizontal margin, px
+  const padV = S.padding;
+  const padH = Math.round(padV * 1.15);
+  const marginPx = S.printMargin;
+  const paperDims = getPaperDims();
 
-  // Paper dimensions in mm
-  const paperDims = {
-    A4:     { w: 210,   h: 297   },
-    A3:     { w: 297,   h: 420   },
-    Letter: { w: 215.9, h: 279.4 },
-    Legal:  { w: 215.9, h: 355.6 },
-  }[S.paperSize] || { w: 210, h: 297 };
-
-  // Convert px margins to mm (96 dpi: 1 px = 25.4/96 mm)
-  const mmV = m  * 25.4 / 96;
-  const mmH = pm * 25.4 / 96;
+  // Convert px print margins to mm (96 dpi: 1 px = 25.4/96 mm)
+  const mmMargin = marginPx * PX_TO_MM;
 
   // Content width in CSS pixels for the off-screen render target
-  const contentWpx = Math.round((paperDims.w - 2 * mmH) * 96 / 25.4);
+  const contentWidthPx = Math.round((paperDims.w - 2 * mmMargin) / PX_TO_MM);
 
   // Build scoped CSS: drop the #paper rule and rename the selector
   const printCSS = (window._lastCSS || '')
@@ -1188,7 +1285,8 @@ function savePDF() {
   const wrapper = document.createElement('div');
   wrapper.style.cssText =
     `position:fixed;top:-99999px;left:-99999px;` +
-    `background:${c.page_bg};font-size:16px;width:${contentWpx}px;padding:0;margin:0`;
+    `background:${c.page_bg};font-size:16px;width:${contentWidthPx}px;` +
+    `padding:${padV}px ${padH}px;margin:0;box-sizing:border-box`;
   wrapper.innerHTML =
     `<div id="pdf-content" style="word-wrap:break-word;overflow-wrap:break-word">${html}</div>`;
   document.body.appendChild(wrapper);
@@ -1219,17 +1317,17 @@ function savePDF() {
 
     // pixels per mm on the rendered canvas
     const pxPerMm  = SCALE * 96 / 25.4;
-    const contentW = paperDims.w - 2 * mmH;   // usable width  in mm
+    const contentW = paperDims.w - 2 * mmMargin; // usable width in mm
     const totalH   = canvas.height / pxPerMm; // full content height in mm
 
     if (S.pageless) {
       // Single continuous page: height = content height + top/bottom margins
-      const pageHMm = totalH + 2 * mmV;
+      const pageHMm = totalH + 2 * mmMargin;
       const pdf = new jspdf.jsPDF('p', 'mm', [paperDims.w, pageHMm]);
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', mmH, mmV, contentW, totalH);
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', mmMargin, mmMargin, contentW, totalH);
       pdf.save('document.pdf');
     } else {
-      const pageH    = paperDims.h - 2 * mmV;   // usable height in mm per page
+      const pageH    = paperDims.h - 2 * mmMargin; // usable height in mm per page
       const numPages = Math.ceil(totalH / pageH);
       const pdf = new jspdf.jsPDF('p', 'mm', [paperDims.w, paperDims.h]);
 
@@ -1249,7 +1347,7 @@ function savePDF() {
         ctx.fillRect(0, 0, pc.width, pc.height);
         ctx.drawImage(canvas, 0, -sliceTopPx);
 
-        pdf.addImage(pc.toDataURL('image/jpeg', 0.98), 'JPEG', mmH, mmV, contentW, sliceHMm);
+        pdf.addImage(pc.toDataURL('image/jpeg', 0.98), 'JPEG', mmMargin, mmMargin, contentW, sliceHMm);
       }
 
       pdf.save('document.pdf');
