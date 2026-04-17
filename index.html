@@ -1139,7 +1139,9 @@ function applyTheme(name, btn) {
   Object.assign(S.sizes, t.sizes);
   S.lh = t.lh;
   S.paraSpace = t.paraSpace;
-  S.padding = (typeof t.padding === 'number' ? t.padding : t.margin);
+  S.padding = (typeof t.padding === 'number'
+    ? t.padding
+    : (typeof t.margin === 'number' ? t.margin : 52));
 
   id('line-height').value = S.lh;
   id('vl-lh').textContent = S.lh.toFixed(2);
@@ -1255,11 +1257,10 @@ function savePDF() {
   const paperDims = getPaperDims();
 
   // Convert px print margins to mm (96 dpi: 1 px = 25.4/96 mm)
-  const mmV = marginPx * 25.4 / 96;
-  const mmH = marginPx * 25.4 / 96;
+  const mmMargin = marginPx * 25.4 / 96;
 
   // Content width in CSS pixels for the off-screen render target
-  const contentWpx = Math.round((paperDims.w - 2 * mmH) * 96 / 25.4);
+  const contentWpx = Math.round((paperDims.w - 2 * mmMargin) * 96 / 25.4);
 
   // Build scoped CSS: drop the #paper rule and rename the selector
   const printCSS = (window._lastCSS || '')
@@ -1302,17 +1303,17 @@ function savePDF() {
 
     // pixels per mm on the rendered canvas
     const pxPerMm  = SCALE * 96 / 25.4;
-    const contentW = paperDims.w - 2 * mmH;   // usable width  in mm
+    const contentW = paperDims.w - 2 * mmMargin; // usable width in mm
     const totalH   = canvas.height / pxPerMm; // full content height in mm
 
     if (S.pageless) {
       // Single continuous page: height = content height + top/bottom margins
-      const pageHMm = totalH + 2 * mmV;
+      const pageHMm = totalH + 2 * mmMargin;
       const pdf = new jspdf.jsPDF('p', 'mm', [paperDims.w, pageHMm]);
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', mmH, mmV, contentW, totalH);
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', mmMargin, mmMargin, contentW, totalH);
       pdf.save('document.pdf');
     } else {
-      const pageH    = paperDims.h - 2 * mmV;   // usable height in mm per page
+      const pageH    = paperDims.h - 2 * mmMargin; // usable height in mm per page
       const numPages = Math.ceil(totalH / pageH);
       const pdf = new jspdf.jsPDF('p', 'mm', [paperDims.w, paperDims.h]);
 
@@ -1332,7 +1333,7 @@ function savePDF() {
         ctx.fillRect(0, 0, pc.width, pc.height);
         ctx.drawImage(canvas, 0, -sliceTopPx);
 
-        pdf.addImage(pc.toDataURL('image/jpeg', 0.98), 'JPEG', mmH, mmV, contentW, sliceHMm);
+        pdf.addImage(pc.toDataURL('image/jpeg', 0.98), 'JPEG', mmMargin, mmMargin, contentW, sliceHMm);
       }
 
       pdf.save('document.pdf');
