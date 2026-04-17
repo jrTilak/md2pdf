@@ -587,6 +587,8 @@ const FONT_DB = {
   ],
 };
 
+const DEFAULT_PADDING = 52;
+
 // ============================
 // STATE
 // ============================
@@ -694,7 +696,6 @@ const THEMES = {
 function id(x){ return document.getElementById(x); }
 // CSS reference pixel density is 96 DPI, so 1px = 25.4/96 mm.
 const PX_TO_MM = 25.4 / 96;
-const DEFAULT_PADDING = 52;
 // Cleanup fallback when some browsers do not reliably fire afterprint.
 const PRINT_CLEANUP_TIMEOUT_MS = 30000;
 function fontStack(el) {
@@ -923,11 +924,20 @@ function buildCSS() {
   const renderer = new marked.Renderer();
   // Mermaid code blocks → special div, other code blocks → standard pre/code
   renderer.code = function(code, lang, escaped) {
-    if (lang === 'mermaid') {
-      return '<div class="mermaid">' + code + '</div>\n';
+    let blockCode = code;
+    let blockLang = lang;
+    let blockEscaped = escaped;
+    if (code && typeof code === 'object') {
+      blockCode = code.text || '';
+      blockLang = code.lang || '';
+      blockEscaped = !!code.escaped;
     }
-    const langAttr = lang ? ' class="language-' + lang + '"' : '';
-    const safe = escaped ? code : code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const normLang = String(blockLang || '').trim().toLowerCase();
+    if (normLang === 'mermaid') {
+      return '<div class="mermaid">' + blockCode + '</div>\n';
+    }
+    const langAttr = blockLang ? ' class="language-' + blockLang + '"' : '';
+    const safe = blockEscaped ? blockCode : String(blockCode).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return '<pre><code' + langAttr + '>' + safe + '</code></pre>\n';
   };
   // Task list items
