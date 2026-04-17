@@ -1239,13 +1239,14 @@ function printDocument() {
 ${printCSS}`;
   document.head.appendChild(styleEl);
 
+  let cleanupTimer;
   const cleanup = () => {
     window.removeEventListener('afterprint', cleanup);
     if (cleanupTimer) clearTimeout(cleanupTimer);
     if (document.body.contains(root)) document.body.removeChild(root);
     if (document.head.contains(styleEl)) document.head.removeChild(styleEl);
   };
-  const cleanupTimer = setTimeout(cleanup, PRINT_CLEANUP_TIMEOUT_MS);
+  cleanupTimer = setTimeout(cleanup, PRINT_CLEANUP_TIMEOUT_MS);
   window.addEventListener('afterprint', cleanup);
   requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
 }
