@@ -692,6 +692,8 @@ const THEMES = {
 // HELPERS
 // ============================
 function id(x){ return document.getElementById(x); }
+// CSS reference pixel density is 96 DPI, so 1px = 25.4/96 mm.
+const PX_TO_MM = 25.4 / 96;
 function fontStack(el) {
   const f = S.fonts[el] || S.fonts.all;
   if (!f) return 'inherit';
@@ -1139,9 +1141,13 @@ function applyTheme(name, btn) {
   Object.assign(S.sizes, t.sizes);
   S.lh = t.lh;
   S.paraSpace = t.paraSpace;
-  S.padding = (typeof t.padding === 'number'
-    ? t.padding
-    : (typeof t.margin === 'number' ? t.margin : 52));
+  if (typeof t.padding === 'number') {
+    S.padding = t.padding;
+  } else if (typeof t.margin === 'number') {
+    S.padding = t.margin;
+  } else {
+    S.padding = 52;
+  }
 
   id('line-height').value = S.lh;
   id('vl-lh').textContent = S.lh.toFixed(2);
@@ -1179,7 +1185,7 @@ function printDocument() {
   const padV = S.padding;
   const padH = Math.round(padV * 1.15);
   const marginPx = S.printMargin;
-  const marginMm = marginPx * 25.4 / 96;
+  const marginMm = marginPx * PX_TO_MM;
   const paper = getPaperDims();
   const printCSS = (window._lastCSS || '')
     .replace(/#paper\s*\{[^}]*\}/g, '')
@@ -1235,7 +1241,7 @@ ${printCSS}`;
     if (document.head.contains(styleEl)) document.head.removeChild(styleEl);
   };
   window.addEventListener('afterprint', cleanup);
-  setTimeout(() => window.print(), 0);
+  requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
 }
 
 function savePDF() {
@@ -1257,10 +1263,10 @@ function savePDF() {
   const paperDims = getPaperDims();
 
   // Convert px print margins to mm (96 dpi: 1 px = 25.4/96 mm)
-  const mmMargin = marginPx * 25.4 / 96;
+  const mmMargin = marginPx * PX_TO_MM;
 
   // Content width in CSS pixels for the off-screen render target
-  const contentWpx = Math.round((paperDims.w - 2 * mmMargin) * 96 / 25.4);
+  const contentWpx = Math.round((paperDims.w - 2 * mmMargin) / PX_TO_MM);
 
   // Build scoped CSS: drop the #paper rule and rename the selector
   const printCSS = (window._lastCSS || '')
