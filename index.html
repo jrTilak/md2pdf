@@ -695,6 +695,7 @@ function id(x){ return document.getElementById(x); }
 // CSS reference pixel density is 96 DPI, so 1px = 25.4/96 mm.
 const PX_TO_MM = 25.4 / 96;
 const DEFAULT_PADDING = 52;
+const PRINT_CLEANUP_TIMEOUT_MS = 30000;
 function fontStack(el) {
   const f = S.fonts[el] || S.fonts.all;
   if (!f) return 'inherit';
@@ -1244,7 +1245,7 @@ ${printCSS}`;
     if (document.body.contains(root)) document.body.removeChild(root);
     if (document.head.contains(styleEl)) document.head.removeChild(styleEl);
   };
-  const cleanupTimer = setTimeout(cleanup, 30000);
+  const cleanupTimer = setTimeout(cleanup, PRINT_CLEANUP_TIMEOUT_MS);
   window.addEventListener('afterprint', cleanup);
   requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
 }
