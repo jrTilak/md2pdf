@@ -120,13 +120,13 @@
 	font-family: var(--md-font-code);
 	font-size: 0.9em;
 	color: var(--md-color-code);
-	background: color-mix(in oklab, var(--md-color-code) 9%, white);
+	background: color-mix(in oklab, var(--md-color-code) 11%, var(--md-color-page));
 	padding: 0.1em 0.35em;
 	border-radius: 0.3em;
 }
 
 [data-slot="pre"] {
-	background: color-mix(in oklab, var(--md-color-code) 6%, white);
+	background: color-mix(in oklab, var(--md-color-code) 8%, var(--md-color-page));
 	border: 1px solid color-mix(in oklab, var(--md-color-divider) 78%, black);
 	border-radius: 0.6em;
 	padding: 1rem;
@@ -156,7 +156,7 @@
 }
 
 [data-slot="th"] {
-	background: color-mix(in oklab, var(--md-color-divider) 22%, white);
+	background: color-mix(in oklab, var(--md-color-divider) 20%, var(--md-color-page));
 	font-weight: 700;
 }
 
@@ -181,6 +181,44 @@
 .md-mermaid svg {
 	width: 100%;
 	height: auto;
+}
+
+.markdown-alert {
+	margin: 0 0 var(--md-paragraph-spacing) 0;
+	padding: 0.85rem 1rem;
+	border-left: 4px solid var(--md-color-link);
+	border-radius: 0.5rem;
+	background: color-mix(in oklab, var(--md-color-link) 8%, var(--md-color-page));
+}
+
+.markdown-alert-title {
+	margin: 0 0 0.4rem 0;
+	font-weight: 700;
+	color: var(--md-color-h2);
+}
+
+.markdown-alert > :last-child {
+	margin-bottom: 0;
+}
+
+.markdown-alert-note {
+	border-left-color: #3b82f6;
+}
+
+.markdown-alert-tip {
+	border-left-color: #10b981;
+}
+
+.markdown-alert-important {
+	border-left-color: #a855f7;
+}
+
+.markdown-alert-warning {
+	border-left-color: #f59e0b;
+}
+
+.markdown-alert-caution {
+	border-left-color: #ef4444;
 }
 
 [data-md-theme="github"] {

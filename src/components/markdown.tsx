@@ -7,12 +7,15 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { Children, isValidElement, useMemo, type CSSProperties } from "react";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import remarkBreaks from "remark-breaks";
 import remarkDirective from "remark-directive";
 import remarkEmoji from "remark-emoji";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
+import remarkGithubBlockquoteAlert from "remark-github-blockquote-alert";
 import remarkMath from "remark-math";
 import { MermaidDiagram } from "./mermaid-diagram";
 import { useMdConfig } from "@/providers/md-config-provider";
@@ -46,6 +49,27 @@ type Props = {
 	 * Raw Markdown to render
 	 **/
 	children: string;
+};
+
+const sanitizeSchema = {
+	...defaultSchema,
+	attributes: {
+		...defaultSchema.attributes,
+		div: [...(defaultSchema.attributes?.div ?? []), "className", "id"],
+		span: [...(defaultSchema.attributes?.span ?? []), "className", "id"],
+		p: [...(defaultSchema.attributes?.p ?? []), "className", "id"],
+		blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "className", "id"],
+		code: [...(defaultSchema.attributes?.code ?? []), "className"],
+		pre: [...(defaultSchema.attributes?.pre ?? []), "className"],
+		table: [...(defaultSchema.attributes?.table ?? []), "className"],
+		thead: [...(defaultSchema.attributes?.thead ?? []), "className"],
+		tbody: [...(defaultSchema.attributes?.tbody ?? []), "className"],
+		tr: [...(defaultSchema.attributes?.tr ?? []), "className"],
+		th: [...(defaultSchema.attributes?.th ?? []), "className"],
+		td: [...(defaultSchema.attributes?.td ?? []), "className"],
+		img: [...(defaultSchema.attributes?.img ?? []), "className", "src", "alt", "title"],
+		a: [...(defaultSchema.attributes?.a ?? []), "className", "target", "rel"],
+	},
 };
 
 export function Markdown({ children }: Props) {
@@ -141,8 +165,11 @@ export function Markdown({ children }: Props) {
 					remarkDirective,
 					remarkFrontmatter,
 					remarkEmoji,
+					remarkGithubBlockquoteAlert,
 				]}
 				rehypePlugins={[
+					rehypeRaw,
+					[rehypeSanitize, sanitizeSchema],
 					rehypeKatex,
 					rehypeSlug,
 					rehypeHighlight,

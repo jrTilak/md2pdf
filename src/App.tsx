@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import {
+	autocompletion,
+	type Completion,
+	type CompletionContext,
+	snippetCompletion,
+} from "@codemirror/autocomplete";
+import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorView } from "@codemirror/view";
 import { useReactToPrint } from "react-to-print";
 import { Markdown } from "./components/markdown";
 import { Button } from "./components/ui/button";
@@ -27,35 +37,91 @@ const PAGE_SIZE_MAP: Record<PaperSize, string> = {
 	LEGAL: "Legal",
 };
 
-const SAMPLE_MARKDOWN = `# Welcome to Markdown -> PDF
+const SAMPLE_MARKDOWN = `# Markdown -> PDF (Supported Syntax Demo)
 
-A powerful converter with **Google Fonts**, syntax highlighting, math equations, and diagrams.
+This sample shows **all major syntax currently supported** in this editor.
 
-## What's New
+## Basic Markdown
 
-- KaTeX math support
-- Syntax highlighting for code blocks
-- Mermaid diagrams
-- Multiple themes
-- Auto-save and Ctrl+S export
+**Bold**, *italic*, ~~strikethrough~~, \`inline code\`, and [links](https://github.com/jrTilak/md2pdf).
+
+- Unordered list item
+1. Ordered list item
+- [x] Task complete
+- [ ] Task pending
+
+> Normal blockquote example.
 
 ---
 
-Inline math: $E = mc^2$
+## GitHub Alerts / Admonitions
+
+> [!NOTE]
+> Use this for additional context.
+
+> [!TIP]
+> Use keyboard shortcut **Ctrl+S** to export quickly.
+
+> [!WARNING]
+> Large Mermaid diagrams can increase bundle size.
+
+## Tables
+
+| Feature | Status | Notes |
+| --- | :---: | --- |
+| KaTeX math | Yes | Inline and block support |
+| Mermaid | Yes | Flowchart/sequence etc. |
+| Raw HTML | Yes | Sanitized for safety |
+
+## Math (KaTeX)
+
+Inline: $E = mc^2$ and $a^2 + b^2 = c^2$.
+
+Block:
+
+$$
+\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}
+$$
+
+## Code Highlighting
+
+\`\`\`ts
+type User = { id: string; name: string };
+const user: User = { id: "1", name: "Ada" };
+console.log(user);
+\`\`\`
+
+\`\`\`python
+def fib(n: int):
+    seq = [0, 1]
+    while len(seq) < n:
+        seq.append(seq[-1] + seq[-2])
+    return seq[:n]
+\`\`\`
+
+## Mermaid Diagram
 
 \`\`\`mermaid
 flowchart LR
   A[Write Markdown] --> B{Preview OK?}
-  B -- Yes --> C[Download PDF]
-  B -- No --> D[Adjust Settings]
+  B -- Yes --> C[Save PDF]
+  B -- No --> D[Adjust Theme/Fonts]
   D --> A
 \`\`\`
 
-| Feature | Status |
-| --- | --- |
-| KaTeX | Yes |
-| Mermaid | Yes |
-| Themes | Yes |
+## Raw HTML (Sanitized)
+
+<div>
+  <p><strong>HTML block:</strong> You can render safe inline HTML tags directly.</p>
+  <ul>
+    <li><code>&lt;div&gt;</code>, <code>&lt;p&gt;</code>, <code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code>, <code>&lt;code&gt;</code></li>
+    <li><a href="https://katex.org/" target="_blank" rel="noopener noreferrer">External links</a></li>
+  </ul>
+</div>
+
+---
+
+*Use the Settings panel to test themes, fonts, typography, colors, and layout controls.*
 `;
 
 export function App() {
@@ -73,7 +139,6 @@ export function App() {
 	);
 
 	const contentRef = useRef<HTMLDivElement>(null);
-	const editorRef = useRef<HTMLTextAreaElement>(null);
 	const pageStyle = useMemo(() => {
 		const printSize = config.pageless ? "auto" : PAGE_SIZE_MAP[config.paperSize];
 		return `
@@ -188,20 +253,49 @@ export function App() {
 	const showPreview = config.viewMode === "preview" || config.viewMode === "split";
 	const activeThemePalette = THEME_PALETTES[config.theme];
 
-	const resizeEditor = useCallback((node: HTMLTextAreaElement | null) => {
-		if (!node) {
-			return;
-		}
-		node.style.height = "auto";
-		node.style.height = `${node.scrollHeight}px`;
-	}, []);
+	const markdownCompletions = useMemo(
+		() => [
+			snippetCompletion("# Title", { label: "h1", type: "keyword" }),
+			snippetCompletion("## Section Title", { label: "h2", type: "keyword" }),
+			snippetCompletion("### Subsection Title", { label: "h3", type: "keyword" }),
+			snippetCompletion("**bold text**", { label: "bold", type: "keyword" }),
+			snippetCompletion("*italic text*", { label: "italic", type: "keyword" }),
+			snippetCompletion("[Link label](https://example.com)", { label: "link", type: "keyword" }),
+			snippetCompletion("![Alt text](https://example.com/image.png)", { label: "image", type: "keyword" }),
+			snippetCompletion(
+				"> [!NOTE]\n> Add note here",
+				{ label: "alert-note", type: "keyword" },
+			),
+			snippetCompletion(
+				"```mermaid\nflowchart LR\n  A[Start] --> B[End]\n```",
+				{ label: "mermaid", type: "keyword" },
+			),
+			snippetCompletion(
+				"$$\nx = {-b \\pm \\sqrt{b^2 - 4ac} \\over 2a}\n$$",
+				{ label: "katex-block", type: "keyword" },
+			),
+			snippetCompletion(
+				"| Col1 | Col2 |\n| --- | --- |\n| v1 | v2 |",
+				{ label: "table", type: "keyword" },
+			),
+			snippetCompletion(
+				"```ts\nconsole.log('Hello markdown')\n```",
+				{ label: "code-ts", type: "keyword" },
+			),
+		],
+		[],
+	);
 
-	useEffect(() => {
-		if (!showEditor) {
-			return;
+	const markdownCompletionSource = (context: CompletionContext) => {
+		const word = context.matchBefore(/[\w!-]+/);
+		if (!context.explicit && !word) {
+			return null;
 		}
-		resizeEditor(editorRef.current);
-	}, [resizeEditor, showEditor]);
+		return {
+			from: word ? word.from : context.pos,
+			options: markdownCompletions as Completion[],
+		};
+	};
 
 	return (
 		<div className="min-h-svh bg-background text-foreground">
@@ -553,15 +647,27 @@ export function App() {
 				].join(" ")}
 			>
 				{showEditor ? (
-					<textarea
-						ref={editorRef}
-						className="min-h-[70vh] w-full resize-none overflow-hidden rounded-md border bg-background p-3 font-mono text-sm"
+					<CodeMirror
+						className="min-h-[70vh] overflow-hidden rounded-md border"
 						value={text}
-						onChange={(e) => {
-							setText(e.target.value);
-							resizeEditor(e.target);
+						height="70vh"
+						theme={config.theme === "dark" || config.theme === "dracula" ? oneDark : "light"}
+						basicSetup={{
+							lineNumbers: true,
+							highlightActiveLine: true,
+							highlightActiveLineGutter: true,
+							foldGutter: true,
+							autocompletion: true,
+							bracketMatching: true,
+							closeBrackets: true,
 						}}
-						placeholder="Write markdown here..."
+						extensions={[
+							markdownLanguage(),
+							autocompletion({ override: [markdownCompletionSource] }),
+							EditorView.lineWrapping,
+						]}
+						placeholder="Write markdown here with syntax highlighting..."
+						onChange={(value) => setText(value)}
 					/>
 				) : null}
 				{showPreview ? (
