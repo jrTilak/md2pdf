@@ -154,14 +154,12 @@ export function App() {
 			print-color-adjust: exact;
 		}
 		#md-preview {
-			--md-print-top-space: 28px;
-			--md-print-bottom-space: 30px;
+			/* Match PDF page padding to the preview padding */
+			--md-print-page-padding: var(--md-content-padding);
 			background: var(--md-color-page) !important;
 			box-decoration-break: clone;
 			-webkit-box-decoration-break: clone;
-			padding-top: var(--md-print-top-space) !important;
-			padding-bottom: var(--md-print-bottom-space) !important;
-			margin-top: calc(var(--md-print-top-space) * -1) !important;
+			padding: var(--md-print-page-padding) !important;
 		}
 		`;
 	}, [config.pageless, config.paperSize]);
