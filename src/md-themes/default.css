@@ -301,10 +301,10 @@
 }
 
 [data-md-theme="rose"] {
-  --md-color-page: #fff1f2;
-  --md-color-body: #881337;
-  --md-color-link: #e11d48;
-  --md-color-divider: #fda4af;
+  --md-color-page: #fdf2f4;
+  --md-color-body: #3b0a1d;
+  --md-color-link: #be123c;
+  --md-color-divider: #f1a7b3;
 }
 
 [data-md-theme="solarized"] {
